@@ -92,7 +92,12 @@ class Processor:
 
         ffmpeg = find_ffmpeg()
 
-        probe = probe_file(input_path)
+        try:
+            probe = probe_file(input_path)
+        except FFprobeError as exc:
+            raise ProcessingError(
+                f"Could not read file: {exc}", stderr_tail=""
+            ) from exc
         if not probe.has_audio:
             raise NoAudioStreamError("This video has no audio track to process.")
         duration_seconds = probe.duration_seconds or 0.0

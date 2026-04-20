@@ -40,6 +40,19 @@ python src/main.py
 open dist/AudioBoost.app
 ```
 
+## Running tests
+
+The test suite uses `unittest` from the standard library — no extra deps.
+Run it from the repo root:
+
+```bash
+python3 -m unittest discover tests -v
+```
+
+Tests cover the pure helpers (loudnorm JSON parsing, progress-line parsing,
+output-filename collision handling). If you change those, please add or
+update the test.
+
 ## What I'll gladly review
 
 - Bug fixes with a reproducer
