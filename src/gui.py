@@ -53,29 +53,27 @@ class Palette:
     def __init__(self, dark: bool) -> None:
         self.dark = dark
         if dark:
-            # drop zone / surfaces
             self.drop_bg = "#1f1f23"
             self.drop_bg_active = "#232744"
             self.drop_border = "#2e2e33"
             self.drop_text = "#f3f4f6"
             self.drop_hint = "#9ca3af"
-            # typography
             self.muted = "#9ca3af"
             self.error = "#f87171"
             self.success = "#4ade80"
-            # text widget (error dialog)
             self.text_bg = "#111114"
             self.text_fg = "#e5e7eb"
-            # segmented control track (neutral)
-            self.segment_bg = "#2a2a2f"
-            self.segment_fg = "#d1d5db"
+            # segmented control: track a shade darker than inactive pill so
+            # the pills read as floating above the track.
+            self.segment_track = "#1a1a1d"
+            self.segment_bg = "#2c2c30"
+            self.segment_fg = "#e5e7eb"
             # accent
             self.accent = "#818cf8"        # indigo-400
             self.accent_hover = "#6366f1"  # indigo-500
-            self.accent_soft = "#1e2141"
             self.accent_fg = "#ffffff"
             self.accent_disabled = "#3f3f46"
-            self.accent_disabled_fg = "#6b7280"
+            self.accent_disabled_fg = "#9ca3af"
         else:
             self.drop_bg = "#ffffff"
             self.drop_bg_active = "#eef0ff"
@@ -87,11 +85,11 @@ class Palette:
             self.success = "#15803d"
             self.text_bg = "#fafafa"
             self.text_fg = "#111827"
-            self.segment_bg = "#f3f4f6"
+            self.segment_track = "#e5e7eb"
+            self.segment_bg = "#ffffff"
             self.segment_fg = "#4b5563"
             self.accent = "#6366f1"        # indigo-500
             self.accent_hover = "#4f46e5"  # indigo-600
-            self.accent_soft = "#eef0ff"
             self.accent_fg = "#ffffff"
             self.accent_disabled = "#c7d2fe"
             self.accent_disabled_fg = "#ffffff"
@@ -157,7 +155,9 @@ class AudioBoostApp:
         self._processor: Processor | None = None
         self._worker: threading.Thread | None = None
         self._current_target: LoudnessTarget = DEFAULT_TARGET
-        self._segment_buttons: dict[LoudnessTarget, tk.Button] = {}
+        self._segment_buttons: dict[LoudnessTarget, tk.Label] = {}
+        self._segments_enabled: bool = True
+        self._primary_enabled: bool = False
 
         self._build_style()
         self._build_layout()
@@ -273,30 +273,31 @@ class AudioBoostApp:
         section.pack(fill="x", pady=(16, 0))
         ttk.Label(section, text="Loudness target", style="Muted.TLabel").pack(anchor="w")
 
+        # The track wraps the three pills. aqua ignores bg on tk.Button when
+        # relief is flat, so we use tk.Label (which always honors bg/fg) and
+        # bind click ourselves.
         track = tk.Frame(
-            section,
-            bg=p.segment_bg,
-            highlightthickness=0,
-            bd=0,
+            section, bg=p.segment_track, highlightthickness=0, bd=0
         )
-        track.pack(fill="x", pady=(6, 0), ipady=2)
+        track.pack(fill="x", pady=(8, 0), ipadx=3, ipady=3)
 
+        last = len(TARGETS) - 1
         for idx, target in enumerate(TARGETS):
-            text = f"{target.label}  {target.integrated_lufs:g} LUFS"
-            btn = tk.Button(
+            text = f"{target.label}  {target.integrated_lufs:g}"
+            seg = tk.Label(
                 track,
                 text=text,
                 font=("SF Pro Text", 12, "bold"),
-                bd=0,
-                relief="flat",
+                bg=p.segment_bg,
+                fg=p.segment_fg,
+                padx=8,
+                pady=7,
                 cursor="hand2",
-                padx=14,
-                pady=8,
-                highlightthickness=0,
-                command=lambda t=target: self._on_target_selected(t),
             )
-            btn.pack(side="left", expand=True, fill="both", padx=(3 if idx else 3, 3))
-            self._segment_buttons[target] = btn
+            pad = (0, 0) if idx == last else (0, 3)
+            seg.pack(side="left", expand=True, fill="both", padx=pad)
+            seg.bind("<Button-1>", lambda _e, t=target: self._on_target_selected(t))
+            self._segment_buttons[target] = seg
 
         self._apply_segment_styles()
 
@@ -385,49 +386,52 @@ class AudioBoostApp:
                 fill=color, outline=color,
             )
 
-    # ---------- primary button (custom tk.Button with accent) ----------
+    # ---------- primary button (Label-based pill — aqua-proof) ----------
 
-    def _make_primary_button(self, parent: tk.Widget, text: str, command) -> tk.Button:
+    def _make_primary_button(self, parent: tk.Widget, text: str, command) -> tk.Label:
         p = self.palette
-        btn = tk.Button(
+        btn = tk.Label(
             parent,
             text=text,
-            command=command,
             font=("SF Pro Text", 13, "bold"),
             bg=p.accent,
             fg=p.accent_fg,
-            activebackground=p.accent_hover,
-            activeforeground=p.accent_fg,
-            disabledforeground=p.accent_disabled_fg,
-            bd=0,
-            relief="flat",
+            padx=22,
+            pady=11,
             cursor="hand2",
-            padx=18,
-            pady=9,
-            highlightthickness=0,
         )
+        btn.bind("<Button-1>", lambda _e: self._primary_click(command))
         btn.bind("<Enter>", lambda _e: self._hover_primary(True))
         btn.bind("<Leave>", lambda _e: self._hover_primary(False))
         return btn
 
+    def _primary_click(self, command) -> None:
+        if not self._primary_enabled:
+            return
+        p = self.palette
+        # Brief press feedback, then fire.
+        self.process_button.configure(bg=p.accent_hover)
+        self.process_button.after(
+            90, lambda: self.process_button.configure(bg=p.accent)
+        )
+        command()
+
     def _hover_primary(self, hovered: bool) -> None:
-        if self.process_button["state"] == "disabled":
+        if not self._primary_enabled:
             return
         p = self.palette
         self.process_button.configure(bg=p.accent_hover if hovered else p.accent)
 
     def _set_primary_enabled(self, enabled: bool) -> None:
+        self._primary_enabled = enabled
         p = self.palette
         if enabled:
             self.process_button.configure(
-                state="normal", bg=p.accent, fg=p.accent_fg, cursor="hand2"
+                bg=p.accent, fg=p.accent_fg, cursor="hand2"
             )
         else:
             self.process_button.configure(
-                state="disabled",
-                bg=p.accent_disabled,
-                fg=p.accent_disabled_fg,
-                cursor="arrow",
+                bg=p.accent_disabled, fg=p.accent_disabled_fg, cursor="arrow"
             )
 
     # ---------- ffmpeg sanity ----------
@@ -522,6 +526,8 @@ class AudioBoostApp:
     # ---------- target selector ----------
 
     def _on_target_selected(self, target: LoudnessTarget) -> None:
+        if not self._segments_enabled:
+            return
         if self._worker and self._worker.is_alive():
             return
         self._current_target = target
@@ -529,22 +535,17 @@ class AudioBoostApp:
 
     def _apply_segment_styles(self) -> None:
         p = self.palette
-        for target, btn in self._segment_buttons.items():
+        for target, seg in self._segment_buttons.items():
             if target is self._current_target:
-                btn.configure(
-                    bg=p.accent, fg=p.accent_fg,
-                    activebackground=p.accent_hover, activeforeground=p.accent_fg,
-                )
+                seg.configure(bg=p.accent, fg=p.accent_fg)
             else:
-                btn.configure(
-                    bg=p.segment_bg, fg=p.segment_fg,
-                    activebackground=p.segment_bg, activeforeground=p.segment_fg,
-                )
+                seg.configure(bg=p.segment_bg, fg=p.segment_fg)
 
     def _set_segments_enabled(self, enabled: bool) -> None:
-        for btn in self._segment_buttons.values():
-            btn.configure(state="normal" if enabled else "disabled",
-                          cursor="hand2" if enabled else "arrow")
+        self._segments_enabled = enabled
+        cursor = "hand2" if enabled else "arrow"
+        for seg in self._segment_buttons.values():
+            seg.configure(cursor=cursor)
 
     def _on_drop(self, event) -> None:
         self._on_drop_leave(event)
