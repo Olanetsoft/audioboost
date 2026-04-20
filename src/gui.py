@@ -9,6 +9,7 @@ import tkinter as tk
 from tkinter import filedialog, ttk
 
 from ffmpeg_utils import FFmpegNotFoundError, find_ffmpeg
+from gui_helpers import Palette, human_size, is_dark_mode, parse_dnd_paths
 from processor import (
     DEFAULT_TARGET,
     TARGETS,
@@ -32,104 +33,6 @@ WINDOW_WIDTH = 560
 WINDOW_HEIGHT = 560
 
 
-def _is_dark_mode() -> bool:
-    """Return True if macOS is currently in Dark Mode."""
-    try:
-        result = subprocess.run(
-            ["defaults", "read", "-g", "AppleInterfaceStyle"],
-            capture_output=True, text=True, timeout=1,
-        )
-        return result.returncode == 0 and result.stdout.strip() == "Dark"
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-
-
-class Palette:
-    """Colors chosen to match macOS light/dark panels, plus an indigo accent
-    used for the primary action, selected segments, drop-zone hover, and the
-    waveform glyph. ttk widgets remain unstyled for backgrounds so they keep
-    their native aqua rendering."""
-
-    def __init__(self, dark: bool) -> None:
-        self.dark = dark
-        if dark:
-            self.drop_bg = "#1f1f23"
-            self.drop_bg_active = "#232744"
-            self.drop_border = "#2e2e33"
-            self.drop_text = "#f3f4f6"
-            self.drop_hint = "#9ca3af"
-            self.muted = "#9ca3af"
-            self.error = "#f87171"
-            self.success = "#4ade80"
-            self.text_bg = "#111114"
-            self.text_fg = "#e5e7eb"
-            # segmented control: track a shade darker than inactive pill so
-            # the pills read as floating above the track.
-            self.segment_track = "#1a1a1d"
-            self.segment_bg = "#2c2c30"
-            self.segment_fg = "#e5e7eb"
-            # accent
-            self.accent = "#818cf8"        # indigo-400
-            self.accent_hover = "#6366f1"  # indigo-500
-            self.accent_fg = "#ffffff"
-            self.accent_disabled = "#3f3f46"
-            self.accent_disabled_fg = "#9ca3af"
-        else:
-            self.drop_bg = "#ffffff"
-            self.drop_bg_active = "#eef0ff"
-            self.drop_border = "#e5e7eb"
-            self.drop_text = "#111827"
-            self.drop_hint = "#6b7280"
-            self.muted = "#6b7280"
-            self.error = "#b91c1c"
-            self.success = "#15803d"
-            self.text_bg = "#fafafa"
-            self.text_fg = "#111827"
-            self.segment_track = "#e5e7eb"
-            self.segment_bg = "#ffffff"
-            self.segment_fg = "#4b5563"
-            self.accent = "#6366f1"        # indigo-500
-            self.accent_hover = "#4f46e5"  # indigo-600
-            self.accent_fg = "#ffffff"
-            self.accent_disabled = "#c7d2fe"
-            self.accent_disabled_fg = "#ffffff"
-
-
-def _human_size(nbytes: int) -> str:
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if nbytes < 1024 or unit == "TB":
-            if unit == "B":
-                return f"{nbytes} {unit}"
-            return f"{nbytes:.1f} {unit}"
-        nbytes /= 1024  # type: ignore[assignment]
-    return f"{nbytes:.1f} TB"
-
-
-def _parse_dnd_paths(data: str) -> list[str]:
-    """tkdnd delivers file lists as space-separated, with braces for paths containing spaces."""
-    paths: list[str] = []
-    buf = ""
-    in_brace = False
-    for ch in data:
-        if ch == "{":
-            in_brace = True
-            continue
-        if ch == "}":
-            in_brace = False
-            paths.append(buf)
-            buf = ""
-            continue
-        if ch == " " and not in_brace:
-            if buf:
-                paths.append(buf)
-                buf = ""
-            continue
-        buf += ch
-    if buf:
-        paths.append(buf)
-    return paths
-
-
 class AudioBoostApp:
     def __init__(self) -> None:
         self._dnd_enabled = False
@@ -144,7 +47,7 @@ class AudioBoostApp:
         if self.root is None:
             self.root = tk.Tk()
 
-        self.palette = Palette(dark=_is_dark_mode())
+        self.palette = Palette(dark=is_dark_mode())
 
         self.root.title("AudioBoost")
         self.root.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}")
@@ -549,7 +452,7 @@ class AudioBoostApp:
 
     def _on_drop(self, event) -> None:
         self._on_drop_leave(event)
-        paths = _parse_dnd_paths(event.data)
+        paths = parse_dnd_paths(event.data)
         if not paths:
             return
         self._accept_file(paths[0])
@@ -565,7 +468,7 @@ class AudioBoostApp:
 
         self._selected_path = path
         try:
-            size_str = _human_size(os.path.getsize(path))
+            size_str = human_size(os.path.getsize(path))
         except OSError:
             size_str = "—"
         self.file_label.configure(text=f"{os.path.basename(path)}  ·  {size_str}")

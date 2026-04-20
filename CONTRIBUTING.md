@@ -49,9 +49,29 @@ Run it from the repo root:
 python3 -m unittest discover tests -v
 ```
 
-Tests cover the pure helpers (loudnorm JSON parsing, progress-line parsing,
-output-filename collision handling). If you change those, please add or
-update the test.
+The suite is in four modules:
+
+- [`tests/test_ffmpeg_utils.py`](tests/test_ffmpeg_utils.py) — binary
+  discovery, file probing, loudnorm-JSON / progress-line parsing. Uses
+  `unittest.mock` to exercise the `find_ffmpeg` / `find_ffprobe` fallback
+  chain and `probe_file` error paths.
+- [`tests/test_processor.py`](tests/test_processor.py) — `LoudnessTarget`
+  presets, `_unique_output_path` collision handling, filter-chain
+  assembly (via mocked `subprocess.Popen` — asserts exact ffmpeg args for
+  pass 1 and pass 2), error wrapping, cancellation.
+- [`tests/test_integration.py`](tests/test_integration.py) — real ffmpeg
+  end-to-end: synthesizes a short quiet MP4, boosts it, and asserts
+  loudness lands within ±0.5 LU of each preset, the video stream stays
+  bit-identical, collisions produce suffixed outputs, and mid-run cancel
+  cleans up the partial file. Auto-skipped if ffmpeg isn't available.
+- [`tests/test_gui_helpers.py`](tests/test_gui_helpers.py) — Tk-free UI
+  helpers: `human_size`, `parse_dnd_paths`, `is_dark_mode` (via
+  subprocess mock), and `Palette` invariants.
+
+If you change any of these files, add a test. In particular: any change
+to the audio filter chain must come with updated assertions in
+`FilterChainAssemblyTest` (and, if it's not a mocks-only refactor, a new
+integration test).
 
 ## What I'll gladly review
 
