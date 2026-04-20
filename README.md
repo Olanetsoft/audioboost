@@ -114,6 +114,20 @@ This creates a virtualenv, installs dependencies, and produces
 Gatekeeper on an unsigned build. Right-click (or Control-click) the app in
 Finder → Open → Open. Do this once; future launches won't prompt.
 
+**App quits instantly with "Launch error" or crash-reports about "Code
+Signature Invalid".** macOS 26 enforces code-signature validity on every
+Launch Services launch, and py2app's default signatures can be stale. Re-sign
+the bundle inside-out with an ad-hoc signature:
+
+```bash
+find dist/AudioBoost.app -type f \( -name "*.dylib" -o -name "*.so" \) \
+  -exec codesign --force --sign - --timestamp=none {} +
+codesign --force --sign - --timestamp=none dist/AudioBoost.app
+```
+
+`./build_app.sh` does this automatically; this only matters if you ran py2app
+directly.
+
 **"This video has no audio track to process."** The file is truly silent — no
 audio stream at all. There's nothing to boost.
 

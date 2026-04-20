@@ -73,9 +73,16 @@ def _parse_dnd_paths(data: str) -> list[str]:
 
 class AudioBoostApp:
     def __init__(self) -> None:
+        self._dnd_enabled = False
+        self.root = None  # type: ignore[assignment]
         if _HAS_DND:
-            self.root = TkinterDnD.Tk()
-        else:
+            try:
+                self.root = TkinterDnD.Tk()
+                self._dnd_enabled = True
+            except Exception:
+                # tkdnd native library ABI mismatch with Tcl/Tk 9 — fall back.
+                self.root = None  # type: ignore[assignment]
+        if self.root is None:
             self.root = tk.Tk()
 
         self.root.title("AudioBoost")
@@ -130,9 +137,14 @@ class AudioBoostApp:
         self.drop_frame.pack(fill="x", expand=False)
         self.drop_frame.pack_propagate(False)
 
+        drop_text = (
+            "Drop an MP4 here\n\nor click to choose a file"
+            if self._dnd_enabled
+            else "Click to choose an MP4"
+        )
         self.drop_label = tk.Label(
             self.drop_frame,
-            text="Drop an MP4 here\n\nor click to choose a file",
+            text=drop_text,
             bg=DROP_BG,
             fg=MUTED_TEXT,
             font=("SF Pro Text", 13),
@@ -143,7 +155,7 @@ class AudioBoostApp:
         self.drop_label.bind("<Button-1>", lambda _e: self._open_file_picker())
         self.drop_frame.bind("<Button-1>", lambda _e: self._open_file_picker())
 
-        if _HAS_DND:
+        if self._dnd_enabled:
             self.drop_frame.drop_target_register(DND_FILES)  # type: ignore[attr-defined]
             self.drop_frame.dnd_bind("<<DropEnter>>", self._on_drop_enter)  # type: ignore[attr-defined]
             self.drop_frame.dnd_bind("<<DropLeave>>", self._on_drop_leave)  # type: ignore[attr-defined]
