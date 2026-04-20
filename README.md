@@ -1,8 +1,11 @@
 # AudioBoost
 
 A native macOS drag-and-drop app that fixes quiet video audio without introducing
-clipping or distortion. The video stream is copied losslessly; only the audio is
-reprocessed and normalized to the YouTube loudness standard (-14 LUFS, -1.5 dBTP).
+clipping or distortion. The video stream is copied losslessly when the codec is
+MP4-compatible; only the audio is reprocessed and normalized to one of three
+loudness presets (YouTube -14 LUFS, Podcast -16 LUFS, Broadcast/EBU R128 -23 LUFS).
+
+Supports `.mp4`, `.mov`, `.mkv`, and `.webm` input. Output is always MP4.
 
 ## Requirements
 
@@ -24,30 +27,38 @@ install prompt if it's missing.
 ## Usage
 
 1. Launch AudioBoost.
-2. Drag an `.mp4` onto the drop zone (or click it to choose a file).
-3. Click **Boost Audio**.
-4. The output appears next to the source as `<name>_boosted.mp4`. If that name is
+2. (Optional) pick a loudness target: **YouTube -14**, **Podcast -16**, or
+   **Broadcast -23**.
+3. Drag an `.mp4`, `.mov`, `.mkv`, or `.webm` onto the drop zone (or click to
+   choose a file).
+4. Click **Boost Audio**.
+5. The output appears next to the source as `<name>_boosted.mp4`. If that name is
    taken the app appends `_2`, `_3`, etc.
 
 Click **Show in Finder** to reveal the result, or **Process another** to start over.
 
 ## What it does under the hood
 
-AudioBoost runs a three-stage audio filter chain and copies the video stream
-untouched:
+AudioBoost runs a three-stage audio filter chain:
 
 1. `highpass=f=80` — strips sub-80 Hz rumble (mic handling, AC hum) before amplification.
 2. `acompressor=threshold=-24dB:ratio=3:attack=20:release=250` — a gentle
    speech-friendly compressor that tames peaks so the loudness boost won't clip.
-3. `loudnorm=I=-14:TP=-1.5:LRA=11` — EBU R128 loudness normalization. Run as a
-   **two-pass** normalization: pass 1 measures the input, pass 2 applies linear
-   (non-pumpy) correction using the measurements. Targets -14 LUFS integrated
-   loudness with a -1.5 dBTP true-peak ceiling, which guarantees no digital
+3. `loudnorm=I=<target>:TP=<peak>:LRA=<range>` — EBU R128 loudness normalization.
+   Run as a **two-pass** normalization: pass 1 measures the input, pass 2 applies
+   linear (non-pumpy) correction using the measurements. True-peak ceiling
+   (-1.5 dBTP for YouTube/Podcast, -1.0 for Broadcast) guarantees no digital
    clipping in the output.
 
-The video stream is stream-copied (`-c:v copy`) — no re-encoding, no quality loss,
-no visual changes. The MP4 `moov` atom is moved to the front (`-movflags +faststart`)
-for instant playback.
+**Video:** if the source codec can live in an MP4 container (H.264, H.265/HEVC,
+AV1, MPEG-4), the video stream is passed through with `-c:v copy` — no
+re-encoding, no quality loss. For codecs that can't (VP8, VP9, ProRes, DNxHD,
+etc. — typical in WebM and some MOV/MKV files) AudioBoost re-encodes to H.264
+at CRF 18 with the `slow` preset, which is visually near-lossless but slower
+than passthrough. The status line indicates which path is running.
+
+The MP4 `moov` atom is moved to the front (`-movflags +faststart`) for instant
+playback.
 
 ## Run from source (local UI)
 
@@ -113,12 +124,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports and focused PRs welcome.
 
 [MIT](LICENSE) © 2026 Idris Olubisi
 
-## Planned (not in v1)
+## Planned
 
-- Configurable LUFS target (-14 / -16 / -23)
 - ML-based noise removal (RNNoise / Demucs)
 - Batch processing of multiple files
-- Input formats beyond MP4 (MOV, MKV, WebM)
 - Waveform preview before/after
 - Finder Quick Action for right-click processing
 - Bundled FFmpeg for zero-dependency install

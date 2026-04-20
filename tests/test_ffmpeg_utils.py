@@ -124,8 +124,8 @@ class ProbeFileTest(unittest.TestCase):
         payload = json.dumps({
             "format": {"duration": "12.5"},
             "streams": [
-                {"codec_type": "video"},
-                {"codec_type": "audio"},
+                {"codec_type": "video", "codec_name": "h264"},
+                {"codec_type": "audio", "codec_name": "aac"},
             ],
         })
         with patch("ffmpeg_utils.find_ffprobe", return_value="/bin/ffprobe"), \
@@ -134,6 +134,41 @@ class ProbeFileTest(unittest.TestCase):
         self.assertIsInstance(result, ProbeResult)
         self.assertAlmostEqual(result.duration_seconds, 12.5)
         self.assertTrue(result.has_audio)
+        self.assertEqual(result.video_codec, "h264")
+
+    def test_extracts_video_codec_from_non_mp4_input(self):
+        payload = json.dumps({
+            "format": {"duration": "4.0"},
+            "streams": [
+                {"codec_type": "video", "codec_name": "vp9"},
+                {"codec_type": "audio", "codec_name": "opus"},
+            ],
+        })
+        with patch("ffmpeg_utils.find_ffprobe", return_value="/bin/ffprobe"), \
+             self._patched_run(payload):
+            result = probe_file("/tmp/x.webm")
+        self.assertEqual(result.video_codec, "vp9")
+
+    def test_no_video_stream_yields_none_codec(self):
+        payload = json.dumps({
+            "format": {"duration": "3.0"},
+            "streams": [{"codec_type": "audio", "codec_name": "aac"}],
+        })
+        with patch("ffmpeg_utils.find_ffprobe", return_value="/bin/ffprobe"), \
+             self._patched_run(payload):
+            result = probe_file("/tmp/audio-only.mp4")
+        self.assertIsNone(result.video_codec)
+
+    def test_video_stream_without_codec_name_yields_none(self):
+        # Defensive: if ffprobe ever omits codec_name we treat it as unknown.
+        payload = json.dumps({
+            "format": {"duration": "2.0"},
+            "streams": [{"codec_type": "video"}],
+        })
+        with patch("ffmpeg_utils.find_ffprobe", return_value="/bin/ffprobe"), \
+             self._patched_run(payload):
+            result = probe_file("/tmp/x.mp4")
+        self.assertIsNone(result.video_codec)
 
     def test_video_without_audio_stream(self):
         payload = json.dumps({

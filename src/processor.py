@@ -23,6 +23,19 @@ FILTER_PREFIX = (
     "acompressor=threshold=-24dB:ratio=3:attack=20:release=250"
 )
 
+# Codecs we can stream-copy into an MP4 container without re-encoding.
+# Anything else (VP9, ProRes, DNxHD, etc.) triggers an H.264 re-encode.
+MP4_COMPATIBLE_VIDEO_CODECS: frozenset[str] = frozenset({
+    "h264", "hevc", "h265", "av1", "mpeg4",
+})
+
+
+def video_codec_is_mp4_compatible(codec: str | None) -> bool:
+    """Return True iff this codec can be muxed into MP4 with `-c:v copy`."""
+    if not codec:
+        return False
+    return codec.lower() in MP4_COMPATIBLE_VIDEO_CODECS
+
 
 @dataclass(frozen=True)
 class LoudnessTarget:
@@ -131,10 +144,12 @@ class Processor:
 
         self._check_cancelled()
         output_path = _unique_output_path(input_path)
+        video_copy_ok = video_codec_is_mp4_compatible(probe.video_codec)
         try:
             self._run_pass2(
                 ffmpeg, input_path, output_path, measured,
                 duration_seconds, progress_cb, target,
+                video_copy=video_copy_ok,
             )
         except (ProcessingError, ProcessingCancelled):
             if os.path.exists(output_path):
@@ -205,6 +220,8 @@ class Processor:
         duration_seconds: float,
         progress_cb: ProgressCallback,
         target: LoudnessTarget,
+        *,
+        video_copy: bool,
     ) -> None:
         filter_arg = (
             f"{FILTER_PREFIX},"
@@ -217,6 +234,16 @@ class Processor:
             f":linear=true"
             f":print_format=summary"
         )
+        video_args = (
+            ["-c:v", "copy"]
+            if video_copy
+            else [
+                "-c:v", "libx264",
+                "-preset", "slow",
+                "-crf", "18",
+                "-pix_fmt", "yuv420p",
+            ]
+        )
         cmd = [
             ffmpeg,
             "-hide_banner",
@@ -226,7 +253,7 @@ class Processor:
             "-map", "0:v:0",
             "-map", "0:a:0",
             "-af", filter_arg,
-            "-c:v", "copy",
+            *video_args,
             "-c:a", "aac",
             "-b:a", "192k",
             "-movflags", "+faststart",
@@ -234,6 +261,9 @@ class Processor:
             "-nostats",
             output_path,
         ]
+        status_label = (
+            "Processing audio…" if video_copy else "Processing audio, re-encoding video…"
+        )
 
         stderr_tail: deque[str] = deque(maxlen=200)
         with self._lock:
@@ -267,7 +297,7 @@ class Processor:
                     except ValueError:
                         continue
                     pct = max(0.0, min(99.9, (current_us / total_us) * 100.0))
-                    progress_cb("Processing audio…", pct)
+                    progress_cb(status_label, pct)
                 elif key == "progress" and value == "end":
                     progress_cb("Finalizing…", 99.9)
         finally:
@@ -306,7 +336,9 @@ __all__ = [
     "DEFAULT_TARGET",
     "FFmpegNotFoundError",
     "FFprobeError",
+    "FILTER_PREFIX",
     "LoudnessTarget",
+    "MP4_COMPATIBLE_VIDEO_CODECS",
     "NoAudioStreamError",
     "ProcessingCancelled",
     "ProcessingError",
@@ -317,4 +349,5 @@ __all__ = [
     "TARGET_PODCAST",
     "TARGET_YOUTUBE",
     "process_file",
+    "video_codec_is_mp4_compatible",
 ]

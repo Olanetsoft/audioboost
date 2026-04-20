@@ -49,6 +49,7 @@ def find_ffprobe() -> str:
 class ProbeResult:
     duration_seconds: float
     has_audio: bool
+    video_codec: str | None  # ffprobe codec_name, or None if no video stream
 
 
 def probe_file(path: str) -> ProbeResult:
@@ -56,7 +57,7 @@ def probe_file(path: str) -> ProbeResult:
     cmd = [
         ffprobe,
         "-v", "error",
-        "-show_entries", "format=duration:stream=codec_type",
+        "-show_entries", "format=duration:stream=codec_type,codec_name",
         "-of", "json",
         path,
     ]
@@ -79,7 +80,18 @@ def probe_file(path: str) -> ProbeResult:
 
     streams = data.get("streams", []) or []
     has_audio = any(s.get("codec_type") == "audio" for s in streams)
-    return ProbeResult(duration_seconds=duration, has_audio=has_audio)
+    video_codec: str | None = None
+    for stream in streams:
+        if stream.get("codec_type") == "video":
+            codec = stream.get("codec_name")
+            if isinstance(codec, str) and codec:
+                video_codec = codec
+            break
+    return ProbeResult(
+        duration_seconds=duration,
+        has_audio=has_audio,
+        video_codec=video_codec,
+    )
 
 
 _LOUDNORM_JSON_RE = re.compile(r"\{[^{}]*\"input_i\"[^{}]*\}", re.DOTALL)

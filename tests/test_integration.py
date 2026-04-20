@@ -5,13 +5,12 @@ Each test synthesizes a tiny video in a temp directory (~2 seconds, 160x120)
 so the full suite stays under a few seconds on modern hardware.
 """
 
-import hashlib
+from __future__ import annotations
+
 import os
 import re
 import subprocess
 import tempfile
-import threading
-import time
 import unittest
 
 from tests import _setup  # noqa: F401  (side-effect: puts src/ on sys.path)
@@ -75,6 +74,29 @@ def _synth_silent_mp4(dst: str, duration: float = 1.0) -> None:
         ],
         check=True,
     )
+
+
+def _synth_quiet_webm_vp9(dst: str, duration: float = 2.0) -> None:
+    """WebM with VP9 video — forces the re-encode branch in pass 2."""
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-f", "lavfi", "-i", f"sine=frequency=440:duration={duration}",
+            "-f", "lavfi", "-i", f"color=c=black:s=160x120:d={duration}",
+            "-map", "1:v", "-map", "0:a",
+            "-filter:a", "volume=0.05",
+            "-c:v", "libvpx-vp9", "-b:v", "100k", "-cpu-used", "8",
+            "-c:a", "libopus", "-b:a", "64k",
+            "-shortest",
+            dst,
+        ],
+        check=True,
+    )
+
+
+def _video_codec(path: str) -> str | None:
+    import ffmpeg_utils
+    return ffmpeg_utils.probe_file(path).video_codec
 
 
 def _measure_integrated_lufs(path: str, target) -> float:
@@ -177,6 +199,23 @@ class EndToEndTest(unittest.TestCase):
             )
             self.assertTrue(os.path.exists(first.output_path))
             self.assertTrue(os.path.exists(second.output_path))
+
+    def test_webm_vp9_input_is_reencoded_to_h264_mp4(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "clip.webm")
+            _synth_quiet_webm_vp9(src)
+            self.assertEqual(_video_codec(src), "vp9")
+
+            result = process_file(src)
+            self.assertTrue(os.path.exists(result.output_path))
+            self.assertTrue(result.output_path.endswith(".mp4"))
+            # VP9 cannot live in MP4, so pass 2 must have re-encoded to h264.
+            self.assertEqual(_video_codec(result.output_path), "h264")
+            # And the loudness must still land on target.
+            measured = _measure_integrated_lufs(result.output_path, TARGET_YOUTUBE)
+            self.assertAlmostEqual(
+                measured, TARGET_YOUTUBE.integrated_lufs, delta=0.5
+            )
 
     def test_cancel_removes_partial_output(self):
         with tempfile.TemporaryDirectory() as tmp:

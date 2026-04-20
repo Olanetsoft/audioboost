@@ -105,7 +105,11 @@ class AudioBoostApp:
         ttk.Label(header, text="AudioBoost", style="Title.TLabel").pack(anchor="w")
         ttk.Label(
             header,
-            text="Normalize quiet video audio without clipping. Video is copied untouched.",
+            text=(
+                "Normalize quiet video audio without clipping. MP4, MOV, MKV, "
+                "and WebM in; MP4 out. Video is copied untouched when the "
+                "codec allows."
+            ),
             style="Subtitle.TLabel",
             wraplength=WINDOW_WIDTH - 48,
             justify="left",
@@ -236,7 +240,7 @@ class AudioBoostApp:
         self.wave_canvas.pack(pady=(0, 10))
         self._paint_wave(p.accent)
 
-        drop_primary = "Drop an MP4 here" if self._dnd_enabled else "Choose an MP4"
+        drop_primary = "Drop a video here" if self._dnd_enabled else "Choose a video"
         self.drop_label = tk.Label(
             drop_inner,
             text=drop_primary,
@@ -393,8 +397,15 @@ class AudioBoostApp:
         if self._worker and self._worker.is_alive():
             return
         path = filedialog.askopenfilename(
-            title="Choose an MP4",
-            filetypes=[("MP4 Video", "*.mp4"), ("All files", "*.*")],
+            title="Choose a video",
+            filetypes=[
+                ("Video files", "*.mp4 *.mov *.mkv *.webm *.m4v"),
+                ("MP4", "*.mp4"),
+                ("QuickTime", "*.mov *.m4v"),
+                ("Matroska", "*.mkv"),
+                ("WebM", "*.webm"),
+                ("All files", "*.*"),
+            ],
         )
         if path:
             self._accept_file(path)
@@ -462,8 +473,8 @@ class AudioBoostApp:
         if not os.path.isfile(path):
             self._show_error("File not found.")
             return
-        if not path.lower().endswith(".mp4"):
-            self._show_error("Please drop an MP4 file.")
+        if not path.lower().endswith((".mp4", ".mov", ".mkv", ".webm", ".m4v")):
+            self._show_error("Unsupported file. Drop an MP4, MOV, MKV, or WebM.")
             return
 
         self._selected_path = path

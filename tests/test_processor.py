@@ -17,6 +17,7 @@ from processor import (
     DEFAULT_TARGET,
     FILTER_PREFIX,
     LoudnessTarget,
+    MP4_COMPATIBLE_VIDEO_CODECS,
     NoAudioStreamError,
     Processor,
     ProcessingCancelled,
@@ -26,6 +27,7 @@ from processor import (
     TARGET_PODCAST,
     TARGET_YOUTUBE,
     _unique_output_path,
+    video_codec_is_mp4_compatible,
 )
 
 
@@ -193,7 +195,11 @@ class UniqueOutputPathTest(unittest.TestCase):
 class FilterChainAssemblyTest(unittest.TestCase):
     """Verify the ffmpeg command lines Processor constructs for each pass."""
 
-    def _run_processor(self, target: LoudnessTarget = TARGET_YOUTUBE):
+    def _run_processor(
+        self,
+        target: LoudnessTarget = TARGET_YOUTUBE,
+        video_codec: str = "h264",
+    ):
         """Run process_file with Popen mocked; return (pass1_cmd, pass2_cmd)."""
         captured: list[list[str]] = []
 
@@ -207,9 +213,11 @@ class FilterChainAssemblyTest(unittest.TestCase):
                 stderr_lines=["ok\n"],
             )
 
+        probe = ProbeResult(
+            duration_seconds=10.0, has_audio=True, video_codec=video_codec
+        )
         with patch("processor.find_ffmpeg", return_value="/usr/bin/ffmpeg"), \
-             patch("processor.probe_file",
-                   return_value=ProbeResult(duration_seconds=10.0, has_audio=True)), \
+             patch("processor.probe_file", return_value=probe), \
              patch("processor._unique_output_path", return_value="/tmp/out.mp4"), \
              patch("processor.subprocess.Popen", side_effect=popen_side_effect):
             processor.process_file("/tmp/in.mp4", target=target)
@@ -285,6 +293,74 @@ class FilterChainAssemblyTest(unittest.TestCase):
         self.assertTrue(FILTER_PREFIX.startswith("highpass=f=80"))
         self.assertIn("acompressor=threshold=-24dB", FILTER_PREFIX)
 
+    # --- codec-branching between copy and re-encode --------------------
+
+    def test_h264_source_uses_video_copy(self):
+        _, pass2 = self._run_processor(video_codec="h264")
+        vc_idx = pass2.index("-c:v")
+        self.assertEqual(pass2[vc_idx + 1], "copy")
+        self.assertNotIn("libx264", pass2)
+
+    def test_hevc_source_uses_video_copy(self):
+        _, pass2 = self._run_processor(video_codec="hevc")
+        vc_idx = pass2.index("-c:v")
+        self.assertEqual(pass2[vc_idx + 1], "copy")
+
+    def test_av1_source_uses_video_copy(self):
+        _, pass2 = self._run_processor(video_codec="av1")
+        vc_idx = pass2.index("-c:v")
+        self.assertEqual(pass2[vc_idx + 1], "copy")
+
+    def test_vp9_source_reencodes_to_h264(self):
+        _, pass2 = self._run_processor(video_codec="vp9")
+        vc_idx = pass2.index("-c:v")
+        self.assertEqual(pass2[vc_idx + 1], "libx264")
+        preset_idx = pass2.index("-preset")
+        self.assertEqual(pass2[preset_idx + 1], "slow")
+        crf_idx = pass2.index("-crf")
+        self.assertEqual(pass2[crf_idx + 1], "18")
+        pix_idx = pass2.index("-pix_fmt")
+        self.assertEqual(pass2[pix_idx + 1], "yuv420p")
+
+    def test_prores_source_reencodes_to_h264(self):
+        _, pass2 = self._run_processor(video_codec="prores")
+        vc_idx = pass2.index("-c:v")
+        self.assertEqual(pass2[vc_idx + 1], "libx264")
+
+    def test_missing_video_codec_triggers_reencode(self):
+        # If ffprobe couldn't identify the codec we default to re-encode so
+        # pass 2 never gets surprised by an incompatible stream.
+        _, pass2 = self._run_processor(video_codec=None)  # type: ignore[arg-type]
+        vc_idx = pass2.index("-c:v")
+        self.assertEqual(pass2[vc_idx + 1], "libx264")
+
+
+class VideoCodecCompatTest(unittest.TestCase):
+    def test_whitelist_contents(self):
+        self.assertEqual(
+            MP4_COMPATIBLE_VIDEO_CODECS,
+            frozenset({"h264", "hevc", "h265", "av1", "mpeg4"}),
+        )
+
+    def test_known_compatible_codecs_return_true(self):
+        for codec in ("h264", "hevc", "h265", "av1", "mpeg4"):
+            self.assertTrue(video_codec_is_mp4_compatible(codec), codec)
+
+    def test_known_incompatible_codecs_return_false(self):
+        for codec in ("vp8", "vp9", "theora", "prores", "dnxhd", "ffv1"):
+            self.assertFalse(video_codec_is_mp4_compatible(codec), codec)
+
+    def test_none_returns_false(self):
+        self.assertFalse(video_codec_is_mp4_compatible(None))
+
+    def test_empty_string_returns_false(self):
+        self.assertFalse(video_codec_is_mp4_compatible(""))
+
+    def test_case_insensitive(self):
+        self.assertTrue(video_codec_is_mp4_compatible("H264"))
+        self.assertTrue(video_codec_is_mp4_compatible("HEVC"))
+        self.assertTrue(video_codec_is_mp4_compatible("AV1"))
+
 
 # ---------------------------------------------------------------------------
 # Error paths
@@ -295,7 +371,7 @@ class ProcessFileErrorPathsTest(unittest.TestCase):
     def test_no_audio_stream_raises_specific_exception(self):
         with patch("processor.find_ffmpeg", return_value="/usr/bin/ffmpeg"), \
              patch("processor.probe_file",
-                   return_value=ProbeResult(duration_seconds=5.0, has_audio=False)):
+                   return_value=ProbeResult(duration_seconds=5.0, has_audio=False, video_codec="h264")):
             with self.assertRaises(NoAudioStreamError):
                 processor.process_file("/tmp/silent.mp4")
 
@@ -316,7 +392,7 @@ class ProcessFileErrorPathsTest(unittest.TestCase):
     def test_pass1_failure_produces_processing_error_with_stderr_tail(self):
         with patch("processor.find_ffmpeg", return_value="/usr/bin/ffmpeg"), \
              patch("processor.probe_file",
-                   return_value=ProbeResult(duration_seconds=5.0, has_audio=True)), \
+                   return_value=ProbeResult(duration_seconds=5.0, has_audio=True, video_codec="h264")), \
              patch("processor.subprocess.Popen",
                    return_value=_fake_popen(stderr_lines=["[err] fatal\n"], returncode=1)):
             with self.assertRaises(ProcessingError) as cm:
@@ -327,7 +403,7 @@ class ProcessFileErrorPathsTest(unittest.TestCase):
         # pass 1 exits 0 but stderr has no loudnorm JSON block
         with patch("processor.find_ffmpeg", return_value="/usr/bin/ffmpeg"), \
              patch("processor.probe_file",
-                   return_value=ProbeResult(duration_seconds=5.0, has_audio=True)), \
+                   return_value=ProbeResult(duration_seconds=5.0, has_audio=True, video_codec="h264")), \
              patch("processor.subprocess.Popen",
                    return_value=_fake_popen(stderr_lines=["no JSON here\n"])):
             with self.assertRaises(ProcessingError):
@@ -356,7 +432,7 @@ class ProcessFileErrorPathsTest(unittest.TestCase):
 
             with patch("processor.find_ffmpeg", return_value="/usr/bin/ffmpeg"), \
                  patch("processor.probe_file",
-                       return_value=ProbeResult(duration_seconds=5.0, has_audio=True)), \
+                       return_value=ProbeResult(duration_seconds=5.0, has_audio=True, video_codec="h264")), \
                  patch("processor._unique_output_path", return_value=out), \
                  patch("processor.subprocess.Popen", side_effect=popen_side_effect):
                 with self.assertRaises(ProcessingError):
@@ -377,7 +453,7 @@ class CancellationTest(unittest.TestCase):
         p.cancel()
         with patch("processor.find_ffmpeg", return_value="/usr/bin/ffmpeg"), \
              patch("processor.probe_file",
-                   return_value=ProbeResult(duration_seconds=5.0, has_audio=True)), \
+                   return_value=ProbeResult(duration_seconds=5.0, has_audio=True, video_codec="h264")), \
              patch("processor.subprocess.Popen",
                    return_value=_fake_popen(stderr_lines=[SAMPLE_LOUDNORM_JSON])):
             with self.assertRaises(ProcessingCancelled):
@@ -415,7 +491,7 @@ class CancellationTest(unittest.TestCase):
 
         with patch("processor.find_ffmpeg", return_value="/usr/bin/ffmpeg"), \
              patch("processor.probe_file",
-                   return_value=ProbeResult(duration_seconds=5.0, has_audio=True)), \
+                   return_value=ProbeResult(duration_seconds=5.0, has_audio=True, video_codec="h264")), \
              patch("processor._unique_output_path", return_value="/tmp/o.mp4"), \
              patch("processor.subprocess.Popen") as mock_popen:
             mock_popen.side_effect = [
