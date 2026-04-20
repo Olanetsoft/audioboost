@@ -28,17 +28,51 @@ except Exception:  # pragma: no cover - import-time fallback only
 WINDOW_WIDTH = 540
 WINDOW_HEIGHT = 440
 
-# Drop zone keeps its own surface color — it's the one place we deliberately
-# draw a distinct "card" that contrasts with the window chrome.
-DROP_BG = "#ffffff"
-DROP_BG_ACTIVE = "#eaf1ff"
-DROP_BORDER = "#d1d5db"
-DROP_BORDER_ACTIVE = "#3b82f6"
-DROP_TEXT = "#4b5563"
 
-MUTED_TEXT = "#6b7280"
-ERROR_TEXT = "#b91c1c"
-SUCCESS_TEXT = "#15803d"
+def _is_dark_mode() -> bool:
+    """Return True if macOS is currently in Dark Mode."""
+    try:
+        result = subprocess.run(
+            ["defaults", "read", "-g", "AppleInterfaceStyle"],
+            capture_output=True, text=True, timeout=1,
+        )
+        return result.returncode == 0 and result.stdout.strip() == "Dark"
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+class Palette:
+    """Colors chosen to match macOS light/dark panels. The drop zone is the
+    only surface we paint explicitly; everything else inherits from the aqua
+    theme so ttk widgets blend into the window chrome."""
+
+    def __init__(self, dark: bool) -> None:
+        if dark:
+            self.drop_bg = "#2a2a2c"
+            self.drop_bg_active = "#323346"
+            self.drop_border = "#3a3a3c"
+            self.drop_border_active = "#5b8cff"
+            self.drop_text = "#e5e5e7"
+            self.drop_hint = "#98989d"
+            self.drop_icon = "#5a5a5f"
+            self.error = "#ff6b6b"
+            self.success = "#4ade80"
+            self.muted = "#98989d"
+            self.text_bg = "#1e1e1e"
+            self.text_fg = "#e5e5e7"
+        else:
+            self.drop_bg = "#ffffff"
+            self.drop_bg_active = "#eaf1ff"
+            self.drop_border = "#d1d5db"
+            self.drop_border_active = "#3b82f6"
+            self.drop_text = "#4b5563"
+            self.drop_hint = "#6b7280"
+            self.drop_icon = "#d1d5db"
+            self.error = "#b91c1c"
+            self.success = "#15803d"
+            self.muted = "#6b7280"
+            self.text_bg = "#fafafa"
+            self.text_fg = "#111827"
 
 
 def _human_size(nbytes: int) -> str:
@@ -90,6 +124,8 @@ class AudioBoostApp:
         if self.root is None:
             self.root = tk.Tk()
 
+        self.palette = Palette(dark=_is_dark_mode())
+
         self.root.title("AudioBoost")
         self.root.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}")
         self.root.resizable(False, False)
@@ -114,12 +150,13 @@ class AudioBoostApp:
             pass
         # Leave backgrounds alone so ttk labels stay transparent over whatever
         # surface the aqua theme paints. Only set foregrounds + fonts here.
+        p = self.palette
         style.configure("Title.TLabel", font=("SF Pro Display", 20, "bold"))
-        style.configure("Subtitle.TLabel", foreground=MUTED_TEXT, font=("SF Pro Text", 12))
-        style.configure("Muted.TLabel", foreground=MUTED_TEXT, font=("SF Pro Text", 11))
+        style.configure("Subtitle.TLabel", foreground=p.muted, font=("SF Pro Text", 12))
+        style.configure("Muted.TLabel", foreground=p.muted, font=("SF Pro Text", 11))
         style.configure("File.TLabel", font=("SF Pro Text", 12))
-        style.configure("Error.TLabel", foreground=ERROR_TEXT, font=("SF Pro Text", 11))
-        style.configure("Success.TLabel", foreground=SUCCESS_TEXT, font=("SF Pro Text", 12, "bold"))
+        style.configure("Error.TLabel", foreground=p.error, font=("SF Pro Text", 11))
+        style.configure("Success.TLabel", foreground=p.success, font=("SF Pro Text", 12, "bold"))
 
     def _build_layout(self) -> None:
         container = ttk.Frame(self.root, padding=(22, 20, 22, 18))
@@ -139,26 +176,27 @@ class AudioBoostApp:
         drop_wrap = ttk.Frame(container)
         drop_wrap.pack(fill="x", pady=(16, 0))
 
+        p = self.palette
         self.drop_frame = tk.Frame(
             drop_wrap,
-            bg=DROP_BG,
+            bg=p.drop_bg,
             highlightthickness=2,
-            highlightbackground=DROP_BORDER,
-            highlightcolor=DROP_BORDER,
+            highlightbackground=p.drop_border,
+            highlightcolor=p.drop_border,
             height=180,
             bd=0,
         )
         self.drop_frame.pack(fill="x")
         self.drop_frame.pack_propagate(False)
 
-        drop_inner = tk.Frame(self.drop_frame, bg=DROP_BG)
+        drop_inner = tk.Frame(self.drop_frame, bg=p.drop_bg)
         drop_inner.pack(expand=True)
 
         self.drop_icon = tk.Label(
             drop_inner,
             text="⬆",
-            bg=DROP_BG,
-            fg=DROP_BORDER,
+            bg=p.drop_bg,
+            fg=p.drop_icon,
             font=("SF Pro Display", 32),
             cursor="hand2",
         )
@@ -170,8 +208,8 @@ class AudioBoostApp:
         self.drop_label = tk.Label(
             drop_inner,
             text=drop_primary,
-            bg=DROP_BG,
-            fg=DROP_TEXT,
+            bg=p.drop_bg,
+            fg=p.drop_text,
             font=("SF Pro Text", 14, "bold"),
             cursor="hand2",
         )
@@ -181,8 +219,8 @@ class AudioBoostApp:
         self.drop_hint = tk.Label(
             drop_inner,
             text=drop_secondary,
-            bg=DROP_BG,
-            fg=MUTED_TEXT,
+            bg=p.drop_bg,
+            fg=p.drop_hint,
             font=("SF Pro Text", 11),
             cursor="hand2",
         )
@@ -324,10 +362,12 @@ class AudioBoostApp:
         self.drop_icon.configure(fg=icon_fg)
 
     def _on_drop_enter(self, _event) -> None:
-        self._paint_drop_zone(DROP_BG_ACTIVE, DROP_BORDER_ACTIVE, DROP_BORDER_ACTIVE)
+        p = self.palette
+        self._paint_drop_zone(p.drop_bg_active, p.drop_border_active, p.drop_border_active)
 
     def _on_drop_leave(self, _event) -> None:
-        self._paint_drop_zone(DROP_BG, DROP_BORDER, DROP_BORDER)
+        p = self.palette
+        self._paint_drop_zone(p.drop_bg, p.drop_border, p.drop_icon)
 
     def _on_drop(self, event) -> None:
         self._on_drop_leave(event)
@@ -507,7 +547,7 @@ class AudioBoostApp:
         text = tk.Text(
             text_frame, height=12, wrap="none", font=("SF Mono", 11),
             yscrollcommand=scrollbar.set, relief="solid", bd=1,
-            bg="#fafafa", fg="#111827",
+            bg=self.palette.text_bg, fg=self.palette.text_fg,
         )
         text.pack(side="left", fill="both", expand=True)
         scrollbar.configure(command=text.yview)
