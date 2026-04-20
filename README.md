@@ -105,44 +105,6 @@ This creates a virtualenv, installs dependencies, and produces
 `dist/AudioBoost.app`. Override the interpreter with
 `PYTHON_BIN=python3.12 ./build_app.sh`.
 
-## Troubleshooting
-
-**"FFmpeg is required" dialog on launch.** Install FFmpeg with Homebrew:
-`brew install ffmpeg`, then relaunch.
-
-**macOS says the app is damaged or from an unidentified developer.** This is
-Gatekeeper on an unsigned build. Right-click (or Control-click) the app in
-Finder → Open → Open. Do this once; future launches won't prompt.
-
-**App quits instantly with "Launch error" or crash-reports about "Code
-Signature Invalid".** macOS 26 enforces code-signature validity on every
-Launch Services launch, and py2app's default signatures can be stale. Re-sign
-the bundle inside-out with an ad-hoc signature:
-
-```bash
-find dist/AudioBoost.app -type f \( -name "*.dylib" -o -name "*.so" \) \
-  -exec codesign --force --sign - --timestamp=none {} +
-codesign --force --sign - --timestamp=none dist/AudioBoost.app
-```
-
-`./build_app.sh` does this automatically; this only matters if you ran py2app
-directly.
-
-**"This video has no audio track to process."** The file is truly silent — no
-audio stream at all. There's nothing to boost.
-
-**"Processing error" dialog with a stderr tail.** Click **Copy error** and check
-whether FFmpeg complained about the input container, codec, or file permissions.
-An unusually exotic codec in an `.mp4` wrapper (rare) may need re-encoding first.
-
-**How do I verify the output is actually at -14 LUFS?** Run:
-
-```bash
-ffmpeg -i output.mp4 -af loudnorm=I=-14:TP=-1.5:LRA=11:print_format=json -f null -
-```
-
-The JSON block's `input_i` should read roughly `-14.0` (±0.5 LU).
-
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports and focused PRs welcome.
