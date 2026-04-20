@@ -22,7 +22,28 @@ FILTER_PREFIX = (
     "highpass=f=80,"
     "acompressor=threshold=-24dB:ratio=3:attack=20:release=250"
 )
-LOUDNORM_TARGET = "I=-14:TP=-1.5:LRA=11"
+
+
+@dataclass(frozen=True)
+class LoudnessTarget:
+    """EBU R128 loudness normalization preset."""
+
+    label: str
+    integrated_lufs: float
+    true_peak_db: float
+    lra: float
+
+    @property
+    def loudnorm_args(self) -> str:
+        return f"I={self.integrated_lufs}:TP={self.true_peak_db}:LRA={self.lra}"
+
+
+TARGET_YOUTUBE = LoudnessTarget("YouTube", -14.0, -1.5, 11.0)
+TARGET_PODCAST = LoudnessTarget("Podcast", -16.0, -1.5, 11.0)
+TARGET_BROADCAST = LoudnessTarget("Broadcast", -23.0, -1.0, 20.0)
+
+TARGETS: tuple[LoudnessTarget, ...] = (TARGET_YOUTUBE, TARGET_PODCAST, TARGET_BROADCAST)
+DEFAULT_TARGET = TARGET_YOUTUBE
 
 
 class ProcessingError(RuntimeError):
@@ -86,6 +107,8 @@ class Processor:
         self,
         input_path: str,
         progress_cb: ProgressCallback | None = None,
+        *,
+        target: LoudnessTarget = DEFAULT_TARGET,
     ) -> ProcessResult:
         if progress_cb is None:
             progress_cb = lambda _s, _p: None
@@ -104,13 +127,14 @@ class Processor:
 
         self._check_cancelled()
         progress_cb("Analyzing loudness…", -1.0)
-        measured = self._run_pass1(ffmpeg, input_path)
+        measured = self._run_pass1(ffmpeg, input_path, target)
 
         self._check_cancelled()
         output_path = _unique_output_path(input_path)
         try:
             self._run_pass2(
-                ffmpeg, input_path, output_path, measured, duration_seconds, progress_cb
+                ffmpeg, input_path, output_path, measured,
+                duration_seconds, progress_cb, target,
             )
         except (ProcessingError, ProcessingCancelled):
             if os.path.exists(output_path):
@@ -123,10 +147,10 @@ class Processor:
         progress_cb("Done", 100.0)
         return ProcessResult(output_path=output_path)
 
-    def _run_pass1(self, ffmpeg: str, input_path: str) -> dict:
+    def _run_pass1(self, ffmpeg: str, input_path: str, target: LoudnessTarget) -> dict:
         filter_arg = (
             f"{FILTER_PREFIX},"
-            f"loudnorm={LOUDNORM_TARGET}:print_format=json"
+            f"loudnorm={target.loudnorm_args}:print_format=json"
         )
         cmd = [
             ffmpeg,
@@ -180,10 +204,11 @@ class Processor:
         measured: dict,
         duration_seconds: float,
         progress_cb: ProgressCallback,
+        target: LoudnessTarget,
     ) -> None:
         filter_arg = (
             f"{FILTER_PREFIX},"
-            f"loudnorm={LOUDNORM_TARGET}"
+            f"loudnorm={target.loudnorm_args}"
             f":measured_I={measured['input_i']}"
             f":measured_TP={measured['input_tp']}"
             f":measured_LRA={measured['input_lra']}"
@@ -270,18 +295,26 @@ class Processor:
 def process_file(
     input_path: str,
     progress_cb: ProgressCallback | None = None,
+    *,
+    target: LoudnessTarget = DEFAULT_TARGET,
 ) -> ProcessResult:
     """Convenience wrapper for one-shot processing without cancellation."""
-    return Processor().process_file(input_path, progress_cb)
+    return Processor().process_file(input_path, progress_cb, target=target)
 
 
 __all__ = [
+    "DEFAULT_TARGET",
     "FFmpegNotFoundError",
     "FFprobeError",
+    "LoudnessTarget",
     "NoAudioStreamError",
     "ProcessingCancelled",
     "ProcessingError",
     "Processor",
     "ProcessResult",
+    "TARGETS",
+    "TARGET_BROADCAST",
+    "TARGET_PODCAST",
+    "TARGET_YOUTUBE",
     "process_file",
 ]

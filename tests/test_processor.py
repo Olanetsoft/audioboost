@@ -6,7 +6,14 @@ import unittest
 
 from tests import _setup  # noqa: F401  (side-effect: puts src/ on sys.path)
 
-from processor import _unique_output_path
+from processor import (
+    DEFAULT_TARGET,
+    TARGET_BROADCAST,
+    TARGET_PODCAST,
+    TARGET_YOUTUBE,
+    TARGETS,
+    _unique_output_path,
+)
 
 
 class UniqueOutputPathTest(unittest.TestCase):
@@ -55,6 +62,28 @@ class UniqueOutputPathTest(unittest.TestCase):
                 os.path.basename(_unique_output_path(src)),
                 "my.screen.recording_boosted.mp4",
             )
+
+
+class LoudnessTargetTest(unittest.TestCase):
+    def test_youtube_preset(self):
+        self.assertEqual(TARGET_YOUTUBE.integrated_lufs, -14.0)
+        self.assertEqual(TARGET_YOUTUBE.true_peak_db, -1.5)
+        self.assertEqual(TARGET_YOUTUBE.loudnorm_args, "I=-14.0:TP=-1.5:LRA=11.0")
+
+    def test_podcast_preset(self):
+        self.assertEqual(TARGET_PODCAST.integrated_lufs, -16.0)
+        self.assertEqual(TARGET_PODCAST.loudnorm_args, "I=-16.0:TP=-1.5:LRA=11.0")
+
+    def test_broadcast_preset(self):
+        self.assertEqual(TARGET_BROADCAST.integrated_lufs, -23.0)
+        self.assertEqual(TARGET_BROADCAST.true_peak_db, -1.0)
+        self.assertEqual(TARGET_BROADCAST.lra, 20.0)
+
+    def test_default_is_youtube(self):
+        self.assertIs(DEFAULT_TARGET, TARGET_YOUTUBE)
+
+    def test_targets_tuple_lists_all_three(self):
+        self.assertEqual(TARGETS, (TARGET_YOUTUBE, TARGET_PODCAST, TARGET_BROADCAST))
 
 
 if __name__ == "__main__":

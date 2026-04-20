@@ -10,6 +10,9 @@ from tkinter import filedialog, ttk
 
 from ffmpeg_utils import FFmpegNotFoundError, find_ffmpeg
 from processor import (
+    DEFAULT_TARGET,
+    TARGETS,
+    LoudnessTarget,
     NoAudioStreamError,
     ProcessingCancelled,
     ProcessingError,
@@ -25,8 +28,8 @@ except Exception:  # pragma: no cover - import-time fallback only
     _HAS_DND = False
 
 
-WINDOW_WIDTH = 540
-WINDOW_HEIGHT = 440
+WINDOW_WIDTH = 560
+WINDOW_HEIGHT = 560
 
 
 def _is_dark_mode() -> bool:
@@ -42,37 +45,56 @@ def _is_dark_mode() -> bool:
 
 
 class Palette:
-    """Colors chosen to match macOS light/dark panels. The drop zone is the
-    only surface we paint explicitly; everything else inherits from the aqua
-    theme so ttk widgets blend into the window chrome."""
+    """Colors chosen to match macOS light/dark panels, plus an indigo accent
+    used for the primary action, selected segments, drop-zone hover, and the
+    waveform glyph. ttk widgets remain unstyled for backgrounds so they keep
+    their native aqua rendering."""
 
     def __init__(self, dark: bool) -> None:
+        self.dark = dark
         if dark:
-            self.drop_bg = "#2a2a2c"
-            self.drop_bg_active = "#323346"
-            self.drop_border = "#3a3a3c"
-            self.drop_border_active = "#5b8cff"
-            self.drop_text = "#e5e5e7"
-            self.drop_hint = "#98989d"
-            self.drop_icon = "#5a5a5f"
-            self.error = "#ff6b6b"
+            # drop zone / surfaces
+            self.drop_bg = "#1f1f23"
+            self.drop_bg_active = "#232744"
+            self.drop_border = "#2e2e33"
+            self.drop_text = "#f3f4f6"
+            self.drop_hint = "#9ca3af"
+            # typography
+            self.muted = "#9ca3af"
+            self.error = "#f87171"
             self.success = "#4ade80"
-            self.muted = "#98989d"
-            self.text_bg = "#1e1e1e"
-            self.text_fg = "#e5e5e7"
+            # text widget (error dialog)
+            self.text_bg = "#111114"
+            self.text_fg = "#e5e7eb"
+            # segmented control track (neutral)
+            self.segment_bg = "#2a2a2f"
+            self.segment_fg = "#d1d5db"
+            # accent
+            self.accent = "#818cf8"        # indigo-400
+            self.accent_hover = "#6366f1"  # indigo-500
+            self.accent_soft = "#1e2141"
+            self.accent_fg = "#ffffff"
+            self.accent_disabled = "#3f3f46"
+            self.accent_disabled_fg = "#6b7280"
         else:
             self.drop_bg = "#ffffff"
-            self.drop_bg_active = "#eaf1ff"
-            self.drop_border = "#d1d5db"
-            self.drop_border_active = "#3b82f6"
-            self.drop_text = "#4b5563"
+            self.drop_bg_active = "#eef0ff"
+            self.drop_border = "#e5e7eb"
+            self.drop_text = "#111827"
             self.drop_hint = "#6b7280"
-            self.drop_icon = "#d1d5db"
+            self.muted = "#6b7280"
             self.error = "#b91c1c"
             self.success = "#15803d"
-            self.muted = "#6b7280"
             self.text_bg = "#fafafa"
             self.text_fg = "#111827"
+            self.segment_bg = "#f3f4f6"
+            self.segment_fg = "#4b5563"
+            self.accent = "#6366f1"        # indigo-500
+            self.accent_hover = "#4f46e5"  # indigo-600
+            self.accent_soft = "#eef0ff"
+            self.accent_fg = "#ffffff"
+            self.accent_disabled = "#c7d2fe"
+            self.accent_disabled_fg = "#ffffff"
 
 
 def _human_size(nbytes: int) -> str:
@@ -134,6 +156,8 @@ class AudioBoostApp:
         self._selected_path: str | None = None
         self._processor: Processor | None = None
         self._worker: threading.Thread | None = None
+        self._current_target: LoudnessTarget = DEFAULT_TARGET
+        self._segment_buttons: dict[LoudnessTarget, tk.Button] = {}
 
         self._build_style()
         self._build_layout()
@@ -151,15 +175,25 @@ class AudioBoostApp:
         # Leave backgrounds alone so ttk labels stay transparent over whatever
         # surface the aqua theme paints. Only set foregrounds + fonts here.
         p = self.palette
-        style.configure("Title.TLabel", font=("SF Pro Display", 20, "bold"))
+        style.configure("Title.TLabel", font=("SF Pro Display", 22, "bold"))
         style.configure("Subtitle.TLabel", foreground=p.muted, font=("SF Pro Text", 12))
         style.configure("Muted.TLabel", foreground=p.muted, font=("SF Pro Text", 11))
         style.configure("File.TLabel", font=("SF Pro Text", 12))
         style.configure("Error.TLabel", foreground=p.error, font=("SF Pro Text", 11))
         style.configure("Success.TLabel", foreground=p.success, font=("SF Pro Text", 12, "bold"))
+        # aqua ignores most Progressbar overrides, but troughcolor + background
+        # land on newer Tk builds — harmless to try on older ones.
+        style.configure(
+            "Accent.Horizontal.TProgressbar",
+            troughcolor=p.segment_bg,
+            background=p.accent,
+            bordercolor=p.segment_bg,
+            lightcolor=p.accent,
+            darkcolor=p.accent,
+        )
 
     def _build_layout(self) -> None:
-        container = ttk.Frame(self.root, padding=(22, 20, 22, 18))
+        container = ttk.Frame(self.root, padding=(24, 20, 24, 20))
         container.pack(fill="both", expand=True)
 
         # --- header
@@ -168,15 +202,109 @@ class AudioBoostApp:
         ttk.Label(header, text="AudioBoost", style="Title.TLabel").pack(anchor="w")
         ttk.Label(
             header,
-            text="Normalize quiet video audio to -14 LUFS without clipping.",
+            text="Normalize quiet video audio without clipping. Video is copied untouched.",
             style="Subtitle.TLabel",
+            wraplength=WINDOW_WIDTH - 48,
+            justify="left",
         ).pack(anchor="w", pady=(2, 0))
 
-        # --- drop zone (the one deliberately custom-styled card)
-        drop_wrap = ttk.Frame(container)
-        drop_wrap.pack(fill="x", pady=(16, 0))
+        # --- loudness target selector
+        self._build_target_selector(container)
 
+        # --- drop zone
+        self._build_drop_zone(container)
+
+        # --- selected file row (packs lazily)
+        self.file_row = ttk.Frame(container)
+        self.file_row.pack(fill="x", pady=(14, 0))
+        self.file_label = ttk.Label(self.file_row, text="", style="File.TLabel")
+        self.file_label.pack(side="left")
+        self.clear_button = ttk.Button(
+            self.file_row, text="Clear", command=self._clear_selection
+        )
+
+        # --- inline error (packs lazily)
+        self.inline_error_var = tk.StringVar(value="")
+        self.inline_error = ttk.Label(
+            container, textvariable=self.inline_error_var, style="Error.TLabel"
+        )
+
+        # --- progress + status
+        self.progress_var = tk.DoubleVar(value=0.0)
+        self.progress = ttk.Progressbar(
+            container,
+            mode="determinate",
+            maximum=100,
+            variable=self.progress_var,
+            style="Accent.Horizontal.TProgressbar",
+        )
+        self.progress.pack(fill="x", pady=(18, 8))
+
+        self.status_label = ttk.Label(container, text="", style="Muted.TLabel")
+        self.status_label.pack(anchor="w")
+
+        # --- action row pinned to the bottom
+        action_row = ttk.Frame(container)
+        action_row.pack(side="bottom", fill="x", pady=(16, 0))
+
+        self.process_button = self._make_primary_button(
+            action_row, "Boost Audio", self._on_process_clicked
+        )
+        self.process_button.pack(side="left")
+        self._set_primary_enabled(False)
+
+        self.cancel_button = ttk.Button(
+            action_row, text="Cancel", command=self._on_cancel_clicked
+        )
+        self.show_button = ttk.Button(
+            action_row, text="Show in Finder", command=self._on_show_in_finder
+        )
+        self.another_button = ttk.Button(
+            action_row, text="Process another", command=self._reset_for_next
+        )
+
+        self._last_output: str | None = None
+
+    # ---------- layout pieces ----------
+
+    def _build_target_selector(self, parent: tk.Widget) -> None:
         p = self.palette
+        section = ttk.Frame(parent)
+        section.pack(fill="x", pady=(16, 0))
+        ttk.Label(section, text="Loudness target", style="Muted.TLabel").pack(anchor="w")
+
+        track = tk.Frame(
+            section,
+            bg=p.segment_bg,
+            highlightthickness=0,
+            bd=0,
+        )
+        track.pack(fill="x", pady=(6, 0), ipady=2)
+
+        for idx, target in enumerate(TARGETS):
+            text = f"{target.label}  {target.integrated_lufs:g} LUFS"
+            btn = tk.Button(
+                track,
+                text=text,
+                font=("SF Pro Text", 12, "bold"),
+                bd=0,
+                relief="flat",
+                cursor="hand2",
+                padx=14,
+                pady=8,
+                highlightthickness=0,
+                command=lambda t=target: self._on_target_selected(t),
+            )
+            btn.pack(side="left", expand=True, fill="both", padx=(3 if idx else 3, 3))
+            self._segment_buttons[target] = btn
+
+        self._apply_segment_styles()
+
+    def _build_drop_zone(self, parent: tk.Widget) -> None:
+        p = self.palette
+        drop_wrap = ttk.Frame(parent)
+        drop_wrap.pack(fill="x", pady=(18, 0))
+
         self.drop_frame = tk.Frame(
             drop_wrap,
             bg=p.drop_bg,
@@ -192,30 +320,32 @@ class AudioBoostApp:
         drop_inner = tk.Frame(self.drop_frame, bg=p.drop_bg)
         drop_inner.pack(expand=True)
 
-        self.drop_icon = tk.Label(
+        # Waveform canvas: 11 rounded accent bars whose heights form a soft peak.
+        self.wave_canvas = tk.Canvas(
             drop_inner,
-            text="⬆",
+            width=154,
+            height=44,
             bg=p.drop_bg,
-            fg=p.drop_icon,
-            font=("SF Pro Display", 32),
-            cursor="hand2",
+            highlightthickness=0,
+            bd=0,
         )
-        self.drop_icon.pack(pady=(0, 6))
+        self.wave_canvas.pack(pady=(0, 10))
+        self._paint_wave(p.accent)
 
-        drop_primary = (
-            "Drop an MP4 here" if self._dnd_enabled else "Choose an MP4"
-        )
+        drop_primary = "Drop an MP4 here" if self._dnd_enabled else "Choose an MP4"
         self.drop_label = tk.Label(
             drop_inner,
             text=drop_primary,
             bg=p.drop_bg,
             fg=p.drop_text,
-            font=("SF Pro Text", 14, "bold"),
+            font=("SF Pro Text", 15, "bold"),
             cursor="hand2",
         )
         self.drop_label.pack()
 
-        drop_secondary = "or click to choose a file" if self._dnd_enabled else "click to browse"
+        drop_secondary = (
+            "or click to choose a file" if self._dnd_enabled else "click to browse"
+        )
         self.drop_hint = tk.Label(
             drop_inner,
             text=drop_secondary,
@@ -226,7 +356,10 @@ class AudioBoostApp:
         )
         self.drop_hint.pack(pady=(2, 0))
 
-        for widget in (self.drop_frame, drop_inner, self.drop_icon, self.drop_label, self.drop_hint):
+        for widget in (
+            self.drop_frame, drop_inner, self.wave_canvas,
+            self.drop_label, self.drop_hint,
+        ):
             widget.bind("<Button-1>", lambda _e: self._open_file_picker())
 
         if self._dnd_enabled:
@@ -235,59 +368,67 @@ class AudioBoostApp:
             self.drop_frame.dnd_bind("<<DropLeave>>", self._on_drop_leave)  # type: ignore[attr-defined]
             self.drop_frame.dnd_bind("<<Drop>>", self._on_drop)  # type: ignore[attr-defined]
 
-        # --- selected file row (only visible when a file is chosen)
-        self.file_row = ttk.Frame(container)
-        self.file_row.pack(fill="x", pady=(14, 0))
-        self.file_label = ttk.Label(self.file_row, text="", style="File.TLabel")
-        self.file_label.pack(side="left")
-        self.clear_button = ttk.Button(
-            self.file_row, text="Clear", command=self._clear_selection
+    _WAVE_HEIGHTS = (10, 18, 26, 34, 40, 44, 40, 34, 26, 18, 10)
+
+    def _paint_wave(self, color: str) -> None:
+        self.wave_canvas.delete("all")
+        bar_w, gap = 8, 6
+        total = len(self._WAVE_HEIGHTS) * bar_w + (len(self._WAVE_HEIGHTS) - 1) * gap
+        x0 = (int(self.wave_canvas.cget("width")) - total) // 2
+        canvas_h = int(self.wave_canvas.cget("height"))
+        for i, h in enumerate(self._WAVE_HEIGHTS):
+            x = x0 + i * (bar_w + gap)
+            y_top = (canvas_h - h) // 2
+            y_bot = y_top + h
+            self.wave_canvas.create_rectangle(
+                x, y_top, x + bar_w, y_bot,
+                fill=color, outline=color,
+            )
+
+    # ---------- primary button (custom tk.Button with accent) ----------
+
+    def _make_primary_button(self, parent: tk.Widget, text: str, command) -> tk.Button:
+        p = self.palette
+        btn = tk.Button(
+            parent,
+            text=text,
+            command=command,
+            font=("SF Pro Text", 13, "bold"),
+            bg=p.accent,
+            fg=p.accent_fg,
+            activebackground=p.accent_hover,
+            activeforeground=p.accent_fg,
+            disabledforeground=p.accent_disabled_fg,
+            bd=0,
+            relief="flat",
+            cursor="hand2",
+            padx=18,
+            pady=9,
+            highlightthickness=0,
         )
-        # Packed lazily when a file is selected.
+        btn.bind("<Enter>", lambda _e: self._hover_primary(True))
+        btn.bind("<Leave>", lambda _e: self._hover_primary(False))
+        return btn
 
-        # --- inline error (hidden when empty to avoid stray baseline artifacts)
-        self.inline_error_var = tk.StringVar(value="")
-        self.inline_error = ttk.Label(
-            container, textvariable=self.inline_error_var, style="Error.TLabel"
-        )
-        # Packed on demand in _show_error.
+    def _hover_primary(self, hovered: bool) -> None:
+        if self.process_button["state"] == "disabled":
+            return
+        p = self.palette
+        self.process_button.configure(bg=p.accent_hover if hovered else p.accent)
 
-        # --- progress
-        self.progress_var = tk.DoubleVar(value=0.0)
-        self.progress = ttk.Progressbar(
-            container, mode="determinate", maximum=100, variable=self.progress_var
-        )
-        self.progress.pack(fill="x", pady=(16, 6))
-
-        self.status_label = ttk.Label(container, text="", style="Muted.TLabel")
-        self.status_label.pack(anchor="w")
-
-        # --- action row pinned to the bottom
-        action_row = ttk.Frame(container)
-        action_row.pack(side="bottom", fill="x", pady=(14, 0))
-
-        self.process_button = ttk.Button(
-            action_row,
-            text="Boost Audio",
-            command=self._on_process_clicked,
-            state="disabled",
-        )
-        self.process_button.pack(side="left")
-
-        self.cancel_button = ttk.Button(
-            action_row, text="Cancel", command=self._on_cancel_clicked
-        )
-        # Packed lazily during processing.
-
-        self.show_button = ttk.Button(
-            action_row, text="Show in Finder", command=self._on_show_in_finder
-        )
-        self.another_button = ttk.Button(
-            action_row, text="Process another", command=self._reset_for_next
-        )
-        # Completion buttons packed lazily in _show_completion_buttons.
-
-        self._last_output: str | None = None
+    def _set_primary_enabled(self, enabled: bool) -> None:
+        p = self.palette
+        if enabled:
+            self.process_button.configure(
+                state="normal", bg=p.accent, fg=p.accent_fg, cursor="hand2"
+            )
+        else:
+            self.process_button.configure(
+                state="disabled",
+                bg=p.accent_disabled,
+                fg=p.accent_disabled_fg,
+                cursor="arrow",
+            )
 
     # ---------- ffmpeg sanity ----------
 
@@ -342,7 +483,7 @@ class AudioBoostApp:
     # ---------- file selection ----------
 
     def _open_file_picker(self) -> None:
-        if self.process_button.instate(["disabled"]) and self._worker and self._worker.is_alive():
+        if self._worker and self._worker.is_alive():
             return
         path = filedialog.askopenfilename(
             title="Choose an MP4",
@@ -351,23 +492,59 @@ class AudioBoostApp:
         if path:
             self._accept_file(path)
 
-    def _paint_drop_zone(self, bg: str, border: str, icon_fg: str) -> None:
+    def _paint_drop_zone(self, bg: str, border: str, wave_color: str) -> None:
         self.drop_frame.configure(
             bg=bg, highlightbackground=border, highlightcolor=border
         )
         for child in self.drop_frame.winfo_children():
-            child.configure(bg=bg)
+            if isinstance(child, tk.Canvas):
+                child.configure(bg=bg)
+                continue
+            try:
+                child.configure(bg=bg)
+            except tk.TclError:
+                pass
             for sub in child.winfo_children():
-                sub.configure(bg=bg)
-        self.drop_icon.configure(fg=icon_fg)
+                try:
+                    sub.configure(bg=bg)
+                except tk.TclError:
+                    pass
+        self._paint_wave(wave_color)
 
     def _on_drop_enter(self, _event) -> None:
         p = self.palette
-        self._paint_drop_zone(p.drop_bg_active, p.drop_border_active, p.drop_border_active)
+        self._paint_drop_zone(p.drop_bg_active, p.accent, p.accent_hover)
 
     def _on_drop_leave(self, _event) -> None:
         p = self.palette
-        self._paint_drop_zone(p.drop_bg, p.drop_border, p.drop_icon)
+        self._paint_drop_zone(p.drop_bg, p.drop_border, p.accent)
+
+    # ---------- target selector ----------
+
+    def _on_target_selected(self, target: LoudnessTarget) -> None:
+        if self._worker and self._worker.is_alive():
+            return
+        self._current_target = target
+        self._apply_segment_styles()
+
+    def _apply_segment_styles(self) -> None:
+        p = self.palette
+        for target, btn in self._segment_buttons.items():
+            if target is self._current_target:
+                btn.configure(
+                    bg=p.accent, fg=p.accent_fg,
+                    activebackground=p.accent_hover, activeforeground=p.accent_fg,
+                )
+            else:
+                btn.configure(
+                    bg=p.segment_bg, fg=p.segment_fg,
+                    activebackground=p.segment_bg, activeforeground=p.segment_fg,
+                )
+
+    def _set_segments_enabled(self, enabled: bool) -> None:
+        for btn in self._segment_buttons.values():
+            btn.configure(state="normal" if enabled else "disabled",
+                          cursor="hand2" if enabled else "arrow")
 
     def _on_drop(self, event) -> None:
         self._on_drop_leave(event)
@@ -393,7 +570,7 @@ class AudioBoostApp:
         self.file_label.configure(text=f"{os.path.basename(path)}  ·  {size_str}")
         if not self.clear_button.winfo_ismapped():
             self.clear_button.pack(side="right")
-        self.process_button.configure(state="normal")
+        self._set_primary_enabled(True)
 
         self.progress_var.set(0.0)
         self.status_label.configure(text="Ready", style="Muted.TLabel")
@@ -403,7 +580,7 @@ class AudioBoostApp:
         self._selected_path = None
         self.file_label.configure(text="")
         self.clear_button.pack_forget()
-        self.process_button.configure(state="disabled")
+        self._set_primary_enabled(False)
         self.progress_var.set(0.0)
         self.status_label.configure(text="", style="Muted.TLabel")
         self._clear_error()
@@ -429,14 +606,19 @@ class AudioBoostApp:
         self._clear_error()
         self._hide_completion_buttons()
         self.progress_var.set(0.0)
-        self.status_label.configure(text="Starting…", style="Muted.TLabel")
-        self.process_button.configure(state="disabled")
+        target = self._current_target
+        self.status_label.configure(
+            text=f"Starting… (target {target.integrated_lufs:g} LUFS)",
+            style="Muted.TLabel",
+        )
+        self._set_primary_enabled(False)
+        self._set_segments_enabled(False)
         self.cancel_button.pack(side="left", padx=(8, 0))
 
         self._processor = Processor()
         input_path = self._selected_path
         self._worker = threading.Thread(
-            target=self._worker_main, args=(input_path,), daemon=True
+            target=self._worker_main, args=(input_path, target), daemon=True
         )
         self._worker.start()
 
@@ -446,13 +628,13 @@ class AudioBoostApp:
         self.status_label.configure(text="Cancelling…", style="Muted.TLabel")
         self.cancel_button.configure(state="disabled")
 
-    def _worker_main(self, input_path: str) -> None:
+    def _worker_main(self, input_path: str, target: LoudnessTarget) -> None:
         def progress_cb(label: str, pct: float) -> None:
             self.root.after(0, self._apply_progress, label, pct)
 
         assert self._processor is not None
         try:
-            result = self._processor.process_file(input_path, progress_cb)
+            result = self._processor.process_file(input_path, progress_cb, target=target)
         except ProcessingCancelled:
             self.root.after(0, self._on_processing_cancelled)
         except NoAudioStreamError as exc:
@@ -465,7 +647,7 @@ class AudioBoostApp:
         except Exception as exc:  # defensive catch-all
             self.root.after(0, self._on_processing_error, f"Unexpected error: {exc}", "", True)
         else:
-            self.root.after(0, self._on_processing_done, result.output_path)
+            self.root.after(0, self._on_processing_done, result.output_path, target)
 
     # ---------- UI callbacks from worker ----------
 
@@ -479,27 +661,30 @@ class AudioBoostApp:
             self.progress_var.set(pct)
         self.status_label.configure(text=label, style="Muted.TLabel")
 
-    def _on_processing_done(self, output_path: str) -> None:
+    def _on_processing_done(self, output_path: str, target: LoudnessTarget) -> None:
         self.progress.stop()
         self.progress.configure(mode="determinate")
         self.progress_var.set(100.0)
         self._last_output = output_path
         self.status_label.configure(
-            text=f"✓ Saved as {os.path.basename(output_path)}", style="Success.TLabel"
+            text=f"✓ Saved at {target.integrated_lufs:g} LUFS  ·  {os.path.basename(output_path)}",
+            style="Success.TLabel",
         )
         self.cancel_button.pack_forget()
         self.cancel_button.configure(state="normal")
+        self._set_segments_enabled(True)
         self._show_completion_buttons()
 
     def _on_processing_cancelled(self) -> None:
         self.progress.stop()
         self.progress.configure(mode="determinate")
         self.progress_var.set(0.0)
-        self.status_label.configure(text="Cancelled.", style="Muted.TLabel")
+        self.status_label.configure(text="Cancelled", style="Muted.TLabel")
         self.cancel_button.pack_forget()
         self.cancel_button.configure(state="normal")
+        self._set_segments_enabled(True)
         if self._selected_path:
-            self.process_button.configure(state="normal")
+            self._set_primary_enabled(True)
 
     def _on_processing_error(self, message: str, stderr_tail: str, show_details: bool) -> None:
         self.progress.stop()
@@ -507,9 +692,10 @@ class AudioBoostApp:
         self.progress_var.set(0.0)
         self.cancel_button.pack_forget()
         self.cancel_button.configure(state="normal")
-        self.status_label.configure(text="Failed.", style="Error.TLabel")
+        self.status_label.configure(text="Failed", style="Error.TLabel")
+        self._set_segments_enabled(True)
         if self._selected_path:
-            self.process_button.configure(state="normal")
+            self._set_primary_enabled(True)
         if show_details and stderr_tail:
             self._show_error_dialog(message, stderr_tail)
         else:
@@ -521,8 +707,9 @@ class AudioBoostApp:
         self.progress_var.set(0.0)
         self.cancel_button.pack_forget()
         self.cancel_button.configure(state="normal")
+        self._set_segments_enabled(True)
         if self._selected_path:
-            self.process_button.configure(state="normal")
+            self._set_primary_enabled(True)
 
     def _show_error_dialog(self, message: str, stderr_tail: str) -> None:
         dialog = tk.Toplevel(self.root)
