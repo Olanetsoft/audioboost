@@ -695,5 +695,9 @@ class AudioBoostApp:
         self.root.mainloop()
 
 
-def run_app() -> None:
-    AudioBoostApp().run()
+def run_app(initial_file: str | None = None) -> None:
+    app = AudioBoostApp()
+    if initial_file and os.path.isfile(initial_file):
+        # Defer so the event loop is running before we touch widgets.
+        app.root.after(150, lambda: app._accept_file(initial_file))
+    app.run()

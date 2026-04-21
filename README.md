@@ -37,6 +37,44 @@ install prompt if it's missing.
 
 Click **Show in Finder** to reveal the result, or **Process another** to start over.
 
+### Headless mode (CLI)
+
+AudioBoost can process files without opening a window — useful for scripts,
+cron jobs, or the Finder Quick Action below. Invoke the bundled binary
+directly:
+
+```bash
+/Applications/AudioBoost.app/Contents/MacOS/AudioBoost \
+  --cli --target podcast path/to/video.mp4
+```
+
+Flags:
+
+- `--cli` — no GUI; process the given files and exit.
+- `--target {youtube,podcast,broadcast}` — loudness preset (default
+  `youtube`).
+- positional `FILE`s — any number of input videos. Each produces
+  `<name>_boosted.mp4` next to the source.
+
+A macOS notification is posted when processing starts and again when it
+finishes. The process prints per-file progress to stdout and exits 0 on
+success, non-zero on any failure.
+
+### Right-click in Finder (Quick Action)
+
+Install the Quick Action once to get a **Boost Audio with AudioBoost** item
+in Finder's right-click menu:
+
+```bash
+./quick_action/install.sh
+```
+
+Then right-click any `.mp4` / `.mov` / `.mkv` / `.webm` file → **Quick
+Actions** → **Boost Audio with AudioBoost**. The workflow wraps the CLI
+above, so notifications appear and the output lands next to the source.
+
+Uninstall with `./quick_action/install.sh --uninstall`.
+
 ## What it does under the hood
 
 AudioBoost runs a three-stage audio filter chain:
@@ -127,7 +165,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports and focused PRs welcome.
 ## Planned
 
 - ML-based noise removal (RNNoise / Demucs)
-- Batch processing of multiple files
+- Batch processing of multiple files (CLI already supports multi-file)
 - Waveform preview before/after
-- Finder Quick Action for right-click processing
 - Bundled FFmpeg for zero-dependency install

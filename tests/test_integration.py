@@ -15,6 +15,7 @@ import unittest
 
 from tests import _setup  # noqa: F401  (side-effect: puts src/ on sys.path)
 
+import main
 from processor import (
     NoAudioStreamError,
     Processor,
@@ -215,6 +216,26 @@ class EndToEndTest(unittest.TestCase):
             measured = _measure_integrated_lufs(result.output_path, TARGET_YOUTUBE)
             self.assertAlmostEqual(
                 measured, TARGET_YOUTUBE.integrated_lufs, delta=0.5
+            )
+
+    def test_cli_mode_processes_a_real_file(self):
+        import io
+        from contextlib import redirect_stdout
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "quiet.mp4")
+            _synth_quiet_mp4(src)
+
+            with patch("main._post_notification"), redirect_stdout(io.StringIO()):
+                rc = main.main(["--cli", "--target", "podcast", src])
+
+            self.assertEqual(rc, 0)
+            out = os.path.join(tmp, "quiet_boosted.mp4")
+            self.assertTrue(os.path.exists(out))
+            measured = _measure_integrated_lufs(out, TARGET_PODCAST)
+            self.assertAlmostEqual(
+                measured, TARGET_PODCAST.integrated_lufs, delta=0.5
             )
 
     def test_cancel_removes_partial_output(self):
