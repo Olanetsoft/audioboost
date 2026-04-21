@@ -6,7 +6,9 @@ otherwise pull in a real Tk runtime on import.
 
 from __future__ import annotations
 
+import os
 import subprocess
+from dataclasses import dataclass, field
 
 
 def human_size(nbytes: int) -> str:
@@ -65,6 +67,88 @@ def is_dark_mode() -> bool:
         return result.returncode == 0 and result.stdout.strip() == "Dark"
     except (OSError, subprocess.TimeoutExpired):
         return False
+
+
+# ---------------------------------------------------------------------------
+# Batch queue model
+# ---------------------------------------------------------------------------
+
+
+# Status values for QueueItem. Using string constants (not an enum) so the
+# values read naturally in logs and test assertions.
+STATUS_PENDING = "pending"
+STATUS_PROCESSING = "processing"
+STATUS_DONE = "done"
+STATUS_FAILED = "failed"
+
+_STATUS_ICONS = {
+    STATUS_PENDING: "○",
+    STATUS_PROCESSING: "◐",
+    STATUS_DONE: "✓",
+    STATUS_FAILED: "✗",
+}
+
+
+@dataclass
+class QueueItem:
+    """One entry in the batch queue."""
+
+    path: str
+    size_bytes: int
+    status: str = STATUS_PENDING
+    output_path: str | None = None
+    error_message: str | None = None
+
+    @property
+    def basename(self) -> str:
+        return os.path.basename(self.path)
+
+    def display_row(self) -> str:
+        """Single-line representation for a tk.Listbox row."""
+        icon = _STATUS_ICONS.get(self.status, "•")
+        return f"  {icon}  {self.basename}  ·  {human_size(self.size_bytes)}"
+
+
+def format_queue_header(
+    items: list[QueueItem],
+    *,
+    processing_index: int | None = None,
+) -> str:
+    """Return the label shown above the queue list.
+
+    Three cases:
+    * No items → empty string.
+    * Idle with items → "N file(s) queued".
+    * Processing → "Processing i of N · filename".
+    """
+    if not items:
+        return ""
+    if processing_index is None:
+        n = len(items)
+        return f"{n} file{'s' if n != 1 else ''} queued"
+    try:
+        item = items[processing_index]
+    except IndexError:
+        return ""
+    return f"Processing {processing_index + 1} of {len(items)}  ·  {item.basename}"
+
+
+def summarize_completion(items: list[QueueItem]) -> str:
+    """Label shown after a batch finishes."""
+    done = sum(1 for i in items if i.status == STATUS_DONE)
+    failed = sum(1 for i in items if i.status == STATUS_FAILED)
+    if failed == 0 and done > 0:
+        return (
+            f"✓ Saved {done} file{'s' if done != 1 else ''}"
+        )
+    if done == 0 and failed > 0:
+        return f"Failed: {failed} file{'s' if failed != 1 else ''}"
+    return f"Done: {done} saved · {failed} failed"
+
+
+# ---------------------------------------------------------------------------
+# Palette
+# ---------------------------------------------------------------------------
 
 
 class Palette:

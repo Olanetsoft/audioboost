@@ -9,7 +9,19 @@ import tkinter as tk
 from tkinter import filedialog, ttk
 
 from ffmpeg_utils import FFmpegNotFoundError, find_ffmpeg
-from gui_helpers import Palette, human_size, is_dark_mode, parse_dnd_paths
+from gui_helpers import (
+    Palette,
+    QueueItem,
+    STATUS_DONE,
+    STATUS_FAILED,
+    STATUS_PENDING,
+    STATUS_PROCESSING,
+    format_queue_header,
+    human_size,
+    is_dark_mode,
+    parse_dnd_paths,
+    summarize_completion,
+)
 from processor import (
     DEFAULT_TARGET,
     TARGETS,
@@ -54,7 +66,7 @@ class AudioBoostApp:
         self.root.resizable(False, False)
         self.root.minsize(WINDOW_WIDTH, WINDOW_HEIGHT)
 
-        self._selected_path: str | None = None
+        self._queue: list[QueueItem] = []
         self._processor: Processor | None = None
         self._worker: threading.Thread | None = None
         self._current_target: LoudnessTarget = DEFAULT_TARGET
@@ -121,14 +133,8 @@ class AudioBoostApp:
         # --- drop zone
         self._build_drop_zone(container)
 
-        # --- selected file row (packs lazily)
-        self.file_row = ttk.Frame(container)
-        self.file_row.pack(fill="x", pady=(14, 0))
-        self.file_label = ttk.Label(self.file_row, text="", style="File.TLabel")
-        self.file_label.pack(side="left")
-        self.clear_button = ttk.Button(
-            self.file_row, text="Clear", command=self._clear_selection
-        )
+        # --- queue list (packs lazily when at least one file is queued)
+        self._build_queue_list(container)
 
         # --- inline error (packs lazily)
         self.inline_error_var = tk.StringVar(value="")
@@ -293,6 +299,90 @@ class AudioBoostApp:
                 fill=color, outline=color,
             )
 
+    # ---------- queue list (Listbox with per-item status color) ----------
+
+    def _build_queue_list(self, parent: tk.Widget) -> None:
+        p = self.palette
+        self.queue_section = ttk.Frame(parent)
+        # Packed lazily in _refresh_queue_list once the queue has anything.
+
+        header = ttk.Frame(self.queue_section)
+        header.pack(fill="x", pady=(14, 0))
+        self.queue_label_var = tk.StringVar(value="")
+        self.queue_label = ttk.Label(
+            header, textvariable=self.queue_label_var, style="File.TLabel"
+        )
+        self.queue_label.pack(side="left")
+        self.clear_button = ttk.Button(
+            header, text="Clear all", command=self._clear_selection
+        )
+        self.clear_button.pack(side="right")
+
+        list_wrap = tk.Frame(
+            self.queue_section,
+            bg=p.drop_border,
+            bd=0,
+            highlightthickness=0,
+        )
+        list_wrap.pack(fill="x", pady=(6, 0))
+
+        self.file_listbox = tk.Listbox(
+            list_wrap,
+            height=4,
+            bg=p.drop_bg,
+            fg=p.drop_text,
+            selectbackground=p.drop_bg,
+            selectforeground=p.drop_text,
+            highlightthickness=0,
+            bd=0,
+            activestyle="none",
+            font=("SF Pro Text", 12),
+        )
+        self.file_listbox.pack(side="left", fill="both", expand=True)
+        self._listbox_scroll = ttk.Scrollbar(
+            list_wrap, orient="vertical", command=self.file_listbox.yview
+        )
+        self.file_listbox.configure(yscrollcommand=self._listbox_scroll.set)
+        # Scrollbar is packed only when the list overflows.
+
+    def _status_color(self, status: str) -> str:
+        p = self.palette
+        return {
+            STATUS_PENDING: p.drop_hint,
+            STATUS_PROCESSING: p.accent,
+            STATUS_DONE: p.success,
+            STATUS_FAILED: p.error,
+        }.get(status, p.drop_text)
+
+    def _refresh_queue_list(self, processing_index: int | None = None) -> None:
+        """Rebuild the Listbox content from self._queue and update the header."""
+        if not self._queue:
+            if self.queue_section.winfo_ismapped():
+                self.queue_section.pack_forget()
+            self.queue_label_var.set("")
+            return
+
+        if not self.queue_section.winfo_ismapped():
+            self.queue_section.pack(fill="x", after=self.drop_frame.master)
+
+        self.queue_label_var.set(
+            format_queue_header(self._queue, processing_index=processing_index)
+        )
+
+        self.file_listbox.delete(0, "end")
+        for idx, item in enumerate(self._queue):
+            self.file_listbox.insert("end", item.display_row())
+            self.file_listbox.itemconfig(idx, foreground=self._status_color(item.status))
+
+        # Show scrollbar only when content overflows the visible rows.
+        visible_rows = int(self.file_listbox.cget("height"))
+        if len(self._queue) > visible_rows:
+            if not self._listbox_scroll.winfo_ismapped():
+                self._listbox_scroll.pack(side="right", fill="y")
+        else:
+            if self._listbox_scroll.winfo_ismapped():
+                self._listbox_scroll.pack_forget()
+
     # ---------- primary button (Label-based pill — aqua-proof) ----------
 
     def _make_primary_button(self, parent: tk.Widget, text: str, command) -> tk.Label:
@@ -396,8 +486,8 @@ class AudioBoostApp:
     def _open_file_picker(self) -> None:
         if self._worker and self._worker.is_alive():
             return
-        path = filedialog.askopenfilename(
-            title="Choose a video",
+        paths = filedialog.askopenfilenames(
+            title="Choose video(s)",
             filetypes=[
                 ("Video files", "*.mp4 *.mov *.mkv *.webm *.m4v"),
                 ("MP4", "*.mp4"),
@@ -407,7 +497,7 @@ class AudioBoostApp:
                 ("All files", "*.*"),
             ],
         )
-        if path:
+        for path in paths:
             self._accept_file(path)
 
     def _paint_drop_zone(self, bg: str, border: str, wave_color: str) -> None:
@@ -464,9 +554,8 @@ class AudioBoostApp:
     def _on_drop(self, event) -> None:
         self._on_drop_leave(event)
         paths = parse_dnd_paths(event.data)
-        if not paths:
-            return
-        self._accept_file(paths[0])
+        for path in paths:
+            self._accept_file(path)
 
     def _accept_file(self, path: str) -> None:
         self._clear_error()
@@ -477,29 +566,30 @@ class AudioBoostApp:
             self._show_error("Unsupported file. Drop an MP4, MOV, MKV, or WebM.")
             return
 
-        self._selected_path = path
-        try:
-            size_str = human_size(os.path.getsize(path))
-        except OSError:
-            size_str = "—"
-        self.file_label.configure(text=f"{os.path.basename(path)}  ·  {size_str}")
-        if not self.clear_button.winfo_ismapped():
-            self.clear_button.pack(side="right")
-        self._set_primary_enabled(True)
+        # Ignore duplicates — same path already queued.
+        if any(item.path == path for item in self._queue):
+            return
 
+        try:
+            size_bytes = os.path.getsize(path)
+        except OSError:
+            size_bytes = 0
+
+        self._queue.append(QueueItem(path=path, size_bytes=size_bytes))
+        self._set_primary_enabled(True)
         self.progress_var.set(0.0)
         self.status_label.configure(text="Ready", style="Muted.TLabel")
         self._hide_completion_buttons()
+        self._refresh_queue_list()
 
     def _clear_selection(self) -> None:
-        self._selected_path = None
-        self.file_label.configure(text="")
-        self.clear_button.pack_forget()
+        self._queue.clear()
         self._set_primary_enabled(False)
         self.progress_var.set(0.0)
         self.status_label.configure(text="", style="Muted.TLabel")
         self._clear_error()
         self._hide_completion_buttons()
+        self._refresh_queue_list()
 
     # ---------- inline error ----------
 
@@ -516,7 +606,7 @@ class AudioBoostApp:
     # ---------- processing ----------
 
     def _on_process_clicked(self) -> None:
-        if not self._selected_path:
+        if not self._queue:
             return
         self._clear_error()
         self._hide_completion_buttons()
@@ -530,10 +620,19 @@ class AudioBoostApp:
         self._set_segments_enabled(False)
         self.cancel_button.pack(side="left", padx=(8, 0))
 
+        # Reset statuses on a fresh run (e.g. after a partial/failed batch).
+        for item in self._queue:
+            item.status = STATUS_PENDING
+            item.error_message = None
+            item.output_path = None
+        self._refresh_queue_list()
+
         self._processor = Processor()
-        input_path = self._selected_path
+        queue_snapshot = list(self._queue)
         self._worker = threading.Thread(
-            target=self._worker_main, args=(input_path, target), daemon=True
+            target=self._worker_main,
+            args=(queue_snapshot, target),
+            daemon=True,
         )
         self._worker.start()
 
@@ -543,30 +642,58 @@ class AudioBoostApp:
         self.status_label.configure(text="Cancelling…", style="Muted.TLabel")
         self.cancel_button.configure(state="disabled")
 
-    def _worker_main(self, input_path: str, target: LoudnessTarget) -> None:
-        def progress_cb(label: str, pct: float) -> None:
-            self.root.after(0, self._apply_progress, label, pct)
+    def _worker_main(
+        self, items: list[QueueItem], target: LoudnessTarget
+    ) -> None:
+        """Batch worker: process each queued item in sequence.
 
+        Policy:
+        - On ProcessingCancelled: stop the whole batch.
+        - On any other failure: mark the item failed, continue with the next.
+        - On FFmpegNotFoundError: show the install dialog and stop.
+        """
         assert self._processor is not None
-        try:
-            result = self._processor.process_file(input_path, progress_cb, target=target)
-        except ProcessingCancelled:
-            self.root.after(0, self._on_processing_cancelled)
-        except NoAudioStreamError as exc:
-            self.root.after(0, self._on_processing_error, str(exc), "", False)
-        except ProcessingError as exc:
-            self.root.after(0, self._on_processing_error, str(exc), exc.stderr_tail, True)
-        except FFmpegNotFoundError:
-            self.root.after(0, self._show_ffmpeg_missing_dialog)
-            self.root.after(0, self._reset_after_failure)
-        except Exception as exc:  # defensive catch-all
-            self.root.after(0, self._on_processing_error, f"Unexpected error: {exc}", "", True)
-        else:
-            self.root.after(0, self._on_processing_done, result.output_path, target)
+        for idx, item in enumerate(items):
+            if self._processor._cancelled:
+                break
+
+            self.root.after(0, self._on_item_start, idx, item)
+
+            def progress_cb(label: str, pct: float, _idx: int = idx) -> None:
+                self.root.after(0, self._apply_progress, label, pct, _idx)
+
+            try:
+                result = self._processor.process_file(
+                    item.path, progress_cb, target=target
+                )
+            except ProcessingCancelled:
+                self.root.after(0, self._on_item_cancelled, idx, item)
+                break
+            except FFmpegNotFoundError:
+                self.root.after(0, self._show_ffmpeg_missing_dialog)
+                self.root.after(0, self._on_item_failed, idx, item,
+                                 "FFmpeg not found.", "", False)
+                break
+            except NoAudioStreamError as exc:
+                self.root.after(0, self._on_item_failed, idx, item,
+                                str(exc), "", False)
+            except ProcessingError as exc:
+                self.root.after(0, self._on_item_failed, idx, item,
+                                str(exc), exc.stderr_tail, True)
+            except Exception as exc:  # defensive catch-all
+                self.root.after(0, self._on_item_failed, idx, item,
+                                f"Unexpected error: {exc}", "", True)
+            else:
+                self.root.after(0, self._on_item_done, idx, item,
+                                result.output_path, target)
+
+        # Make a fresh Processor for the next batch (the current one may be
+        # in a cancelled state that would short-circuit subsequent runs).
+        self.root.after(0, self._on_batch_complete)
 
     # ---------- UI callbacks from worker ----------
 
-    def _apply_progress(self, label: str, pct: float) -> None:
+    def _apply_progress(self, label: str, pct: float, idx: int) -> None:
         if pct < 0:
             self.progress.configure(mode="indeterminate")
             self.progress.start(12)
@@ -574,57 +701,83 @@ class AudioBoostApp:
             self.progress.stop()
             self.progress.configure(mode="determinate")
             self.progress_var.set(pct)
-        self.status_label.configure(text=label, style="Muted.TLabel")
-
-    def _on_processing_done(self, output_path: str, target: LoudnessTarget) -> None:
-        self.progress.stop()
-        self.progress.configure(mode="determinate")
-        self.progress_var.set(100.0)
-        self._last_output = output_path
+        try:
+            item = self._queue[idx]
+        except IndexError:
+            return
         self.status_label.configure(
-            text=f"✓ Saved at {target.integrated_lufs:g} LUFS  ·  {os.path.basename(output_path)}",
-            style="Success.TLabel",
+            text=f"{label}  ·  {item.basename}", style="Muted.TLabel"
         )
-        self.cancel_button.pack_forget()
-        self.cancel_button.configure(state="normal")
-        self._set_segments_enabled(True)
-        self._show_completion_buttons()
 
-    def _on_processing_cancelled(self) -> None:
-        self.progress.stop()
-        self.progress.configure(mode="determinate")
-        self.progress_var.set(0.0)
-        self.status_label.configure(text="Cancelled", style="Muted.TLabel")
-        self.cancel_button.pack_forget()
-        self.cancel_button.configure(state="normal")
-        self._set_segments_enabled(True)
-        if self._selected_path:
-            self._set_primary_enabled(True)
+    # --- per-item lifecycle ----------------------------------------------
 
-    def _on_processing_error(self, message: str, stderr_tail: str, show_details: bool) -> None:
-        self.progress.stop()
-        self.progress.configure(mode="determinate")
-        self.progress_var.set(0.0)
-        self.cancel_button.pack_forget()
-        self.cancel_button.configure(state="normal")
-        self.status_label.configure(text="Failed", style="Error.TLabel")
-        self._set_segments_enabled(True)
-        if self._selected_path:
-            self._set_primary_enabled(True)
+    def _on_item_start(self, idx: int, item: QueueItem) -> None:
+        try:
+            self._queue[idx].status = STATUS_PROCESSING
+        except IndexError:
+            return
+        self._refresh_queue_list(processing_index=idx)
+
+    def _on_item_done(
+        self, idx: int, item: QueueItem, output_path: str, target: LoudnessTarget
+    ) -> None:
+        if idx < len(self._queue):
+            self._queue[idx].status = STATUS_DONE
+            self._queue[idx].output_path = output_path
+        self._refresh_queue_list(processing_index=idx)
+
+    def _on_item_failed(
+        self, idx: int, item: QueueItem,
+        message: str, stderr_tail: str, show_details: bool,
+    ) -> None:
+        if idx < len(self._queue):
+            self._queue[idx].status = STATUS_FAILED
+            self._queue[idx].error_message = message
+        self._refresh_queue_list(processing_index=idx)
         if show_details and stderr_tail:
-            self._show_error_dialog(message, stderr_tail)
-        else:
-            self._show_error(message)
+            self._show_error_dialog(f"{item.basename}: {message}", stderr_tail)
 
-    def _reset_after_failure(self) -> None:
+    def _on_item_cancelled(self, idx: int, item: QueueItem) -> None:
+        # Leave the item marked pending so a re-run picks it up, but stop
+        # the batch — the worker loop also breaks out.
+        self._refresh_queue_list(processing_index=None)
+
+    # --- end of batch ----------------------------------------------------
+
+    def _on_batch_complete(self) -> None:
         self.progress.stop()
         self.progress.configure(mode="determinate")
-        self.progress_var.set(0.0)
         self.cancel_button.pack_forget()
         self.cancel_button.configure(state="normal")
         self._set_segments_enabled(True)
-        if self._selected_path:
-            self._set_primary_enabled(True)
+
+        # If the user cancelled mid-batch nothing finished this run.
+        any_processed = any(
+            item.status in (STATUS_DONE, STATUS_FAILED) for item in self._queue
+        )
+
+        if not any_processed:
+            self.status_label.configure(text="Cancelled", style="Muted.TLabel")
+            self.progress_var.set(0.0)
+            if self._queue:
+                self._set_primary_enabled(True)
+            self._refresh_queue_list()
+            return
+
+        self.status_label.configure(
+            text=summarize_completion(self._queue),
+            style=(
+                "Success.TLabel"
+                if all(i.status == STATUS_DONE for i in self._queue)
+                else "Muted.TLabel"
+            ),
+        )
+        self.progress_var.set(100.0)
+
+        saved = [i for i in self._queue if i.status == STATUS_DONE and i.output_path]
+        self._last_output = saved[0].output_path if saved else None
+        self._show_completion_buttons(any_saved=bool(saved))
+        self._refresh_queue_list()
 
     def _show_error_dialog(self, message: str, stderr_tail: str) -> None:
         dialog = tk.Toplevel(self.root)
@@ -669,8 +822,9 @@ class AudioBoostApp:
 
     # ---------- completion buttons ----------
 
-    def _show_completion_buttons(self) -> None:
-        self.show_button.pack(side="left", padx=(0, 8))
+    def _show_completion_buttons(self, *, any_saved: bool = True) -> None:
+        if any_saved:
+            self.show_button.pack(side="left", padx=(0, 8))
         self.another_button.pack(side="left")
 
     def _hide_completion_buttons(self) -> None:

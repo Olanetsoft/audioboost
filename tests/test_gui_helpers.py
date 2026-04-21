@@ -7,7 +7,19 @@ from unittest.mock import MagicMock, patch
 from tests import _setup  # noqa: F401  (side-effect: puts src/ on sys.path)
 
 import gui_helpers
-from gui_helpers import Palette, human_size, is_dark_mode, parse_dnd_paths
+from gui_helpers import (
+    Palette,
+    QueueItem,
+    STATUS_DONE,
+    STATUS_FAILED,
+    STATUS_PENDING,
+    STATUS_PROCESSING,
+    format_queue_header,
+    human_size,
+    is_dark_mode,
+    parse_dnd_paths,
+    summarize_completion,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -188,6 +200,93 @@ class PaletteTest(unittest.TestCase):
         for dark in (True, False):
             p = Palette(dark=dark)
             self.assertNotEqual(p.segment_track, p.segment_bg)
+
+
+# ---------------------------------------------------------------------------
+# QueueItem / batch helpers
+# ---------------------------------------------------------------------------
+
+
+def _item(path: str, size: int = 1024, status: str = STATUS_PENDING) -> QueueItem:
+    return QueueItem(path=path, size_bytes=size, status=status)
+
+
+class QueueItemTest(unittest.TestCase):
+    def test_basename_strips_directory(self):
+        self.assertEqual(_item("/tmp/sub/clip.mp4").basename, "clip.mp4")
+
+    def test_display_row_includes_status_icon(self):
+        row = _item("/tmp/clip.mp4", size=2048).display_row()
+        self.assertIn("clip.mp4", row)
+        self.assertIn("○", row)  # pending
+
+    def test_display_row_reflects_status_transitions(self):
+        icons = {
+            STATUS_PENDING: "○",
+            STATUS_PROCESSING: "◐",
+            STATUS_DONE: "✓",
+            STATUS_FAILED: "✗",
+        }
+        for status, icon in icons.items():
+            row = _item("/tmp/x.mp4", status=status).display_row()
+            self.assertIn(icon, row, status)
+
+    def test_display_row_includes_size(self):
+        row = _item("/tmp/x.mp4", size=1024 * 1024).display_row()
+        self.assertIn("1.0 MB", row)
+
+
+class FormatQueueHeaderTest(unittest.TestCase):
+    def test_empty_queue_returns_empty_string(self):
+        self.assertEqual(format_queue_header([]), "")
+
+    def test_single_file_pluralization(self):
+        self.assertEqual(
+            format_queue_header([_item("/tmp/a.mp4")]),
+            "1 file queued",
+        )
+
+    def test_multiple_files_pluralization(self):
+        items = [_item(f"/tmp/{i}.mp4") for i in range(3)]
+        self.assertEqual(format_queue_header(items), "3 files queued")
+
+    def test_processing_label_shows_position_and_filename(self):
+        items = [_item("/tmp/a.mp4"), _item("/tmp/b.mp4"), _item("/tmp/c.mp4")]
+        self.assertEqual(
+            format_queue_header(items, processing_index=1),
+            "Processing 2 of 3  ·  b.mp4",
+        )
+
+    def test_processing_index_out_of_range_returns_empty(self):
+        items = [_item("/tmp/a.mp4")]
+        self.assertEqual(format_queue_header(items, processing_index=5), "")
+
+
+class SummarizeCompletionTest(unittest.TestCase):
+    def test_all_saved_singular(self):
+        self.assertEqual(
+            summarize_completion([_item("/tmp/a.mp4", status=STATUS_DONE)]),
+            "✓ Saved 1 file",
+        )
+
+    def test_all_saved_plural(self):
+        items = [_item(f"/tmp/{i}.mp4", status=STATUS_DONE) for i in range(3)]
+        self.assertEqual(summarize_completion(items), "✓ Saved 3 files")
+
+    def test_all_failed(self):
+        items = [
+            _item("/tmp/a.mp4", status=STATUS_FAILED),
+            _item("/tmp/b.mp4", status=STATUS_FAILED),
+        ]
+        self.assertEqual(summarize_completion(items), "Failed: 2 files")
+
+    def test_mixed_outcome(self):
+        items = [
+            _item("/tmp/a.mp4", status=STATUS_DONE),
+            _item("/tmp/b.mp4", status=STATUS_DONE),
+            _item("/tmp/c.mp4", status=STATUS_FAILED),
+        ]
+        self.assertEqual(summarize_completion(items), "Done: 2 saved · 1 failed")
 
 
 if __name__ == "__main__":

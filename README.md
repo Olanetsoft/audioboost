@@ -29,13 +29,16 @@ install prompt if it's missing.
 1. Launch AudioBoost.
 2. (Optional) pick a loudness target: **YouTube -14**, **Podcast -16**, or
    **Broadcast -23**.
-3. Drag an `.mp4`, `.mov`, `.mkv`, or `.webm` onto the drop zone (or click to
-   choose a file).
+3. Drag one or more `.mp4` / `.mov` / `.mkv` / `.webm` files onto the drop
+   zone (or click to choose). Files stack into a queue with per-file status
+   (pending → processing → done / failed).
 4. Click **Boost Audio**.
-5. The output appears next to the source as `<name>_boosted.mp4`. If that name is
-   taken the app appends `_2`, `_3`, etc.
+5. Each output lands next to its source as `<name>_boosted.mp4`. If that
+   name is taken the app appends `_2`, `_3`, etc.
 
-Click **Show in Finder** to reveal the result, or **Process another** to start over.
+If a single file in the batch fails, the rest still process. **Cancel** stops
+after the current file. Click **Show in Finder** to reveal the first output,
+or **Process another** to clear the queue.
 
 ### Headless mode (CLI)
 
@@ -165,6 +168,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports and focused PRs welcome.
 ## Planned
 
 - ML-based noise removal (RNNoise / Demucs)
-- Batch processing of multiple files (CLI already supports multi-file)
 - Waveform preview before/after
 - Bundled FFmpeg for zero-dependency install
