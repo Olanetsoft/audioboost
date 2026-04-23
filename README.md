@@ -1,5 +1,7 @@
 # AudioBoost
 
+[![Coverage](https://codecov.io/gh/Olanetsoft/audioboost/branch/main/graph/badge.svg)](https://codecov.io/gh/Olanetsoft/audioboost)
+
 A native macOS drag-and-drop app that fixes quiet video audio without introducing
 clipping or distortion. The video stream is copied losslessly when the codec is
 MP4-compatible; only the audio is reprocessed and normalized to one of three

@@ -1,0 +1,44 @@
+# GitHub Actions CI workflow for AudioBoost
+#
+# Triggers:
+#   - Push to main branch
+#   - Pull requests
+#
+# What it does:
+#   - Runs the test suite on macOS with Python 3.12
+#   - Installs ffmpeg for integration test support
+#   - Runs: python -m unittest discover tests
+#
+# To add more tests:
+#   - Create new test files in the tests/ directory
+#   - Name them test_*py so unittest discover picks them up
+
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-14
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install ffmpeg
+        run: brew install ffmpeg
+
+      - name: Install dependencies
+        run: pip install -e .
+
+      - name: Run tests
+        run: python -m unittest discover tests
