@@ -125,6 +125,34 @@ def parse_loudnorm_json(stderr_text: str) -> dict:
     }
 
 
+def waveform_png_args(
+    ffmpeg: str,
+    input_path: str,
+    out_png: str,
+    *,
+    width: int,
+    height: int,
+    color: str,
+) -> list[str]:
+    """Build the ffmpeg argv that renders a transparent waveform PNG.
+
+    `color` is a CSS-style hex like '#6366f1'; ffmpeg's filter parser wants
+    the 0xRRGGBB spelling, so it is converted here.
+    """
+    ff_color = "0x" + color.lstrip("#")
+    return [
+        ffmpeg,
+        "-hide_banner",
+        "-nostdin",
+        "-y",
+        "-i", input_path,
+        "-filter_complex",
+        f"aformat=channel_layouts=mono,showwavespic=s={width}x{height}:colors={ff_color}",
+        "-frames:v", "1",
+        out_png,
+    ]
+
+
 def parse_progress_line(line: str) -> tuple[str, str] | None:
     """Parse a `key=value` line from `ffmpeg -progress pipe:1`. Returns None on non-kv lines."""
     line = line.strip()

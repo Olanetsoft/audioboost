@@ -238,6 +238,23 @@ class EndToEndTest(unittest.TestCase):
                 measured, TARGET_PODCAST.integrated_lufs, delta=0.5
             )
 
+    def test_waveform_png_renders(self):
+        import ffmpeg_utils
+
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "quiet.mp4")
+            _synth_quiet_mp4(src)
+            out_png = os.path.join(tmp, "wave.png")
+            subprocess.run(
+                ffmpeg_utils.waveform_png_args(
+                    "ffmpeg", src, out_png, width=512, height=56,
+                    color="#6366f1",
+                ),
+                capture_output=True, check=True,
+            )
+            with open(out_png, "rb") as f:
+                self.assertEqual(f.read(8), b"\x89PNG\r\n\x1a\n")
+
     def test_analyze_then_reuse_measurement_lands_on_target(self):
         with tempfile.TemporaryDirectory() as tmp:
             src = os.path.join(tmp, "quiet.mp4")

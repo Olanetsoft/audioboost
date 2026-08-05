@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import os
 import subprocess
+import tempfile
 import threading
 import tkinter as tk
 from tkinter import filedialog, ttk
 
-from ffmpeg_utils import FFmpegNotFoundError, find_ffmpeg
+from ffmpeg_utils import FFmpegNotFoundError, find_ffmpeg, waveform_png_args
 from gui_helpers import (
     Palette,
     QueueItem,
@@ -43,7 +44,10 @@ except Exception:  # pragma: no cover - import-time fallback only
 
 
 WINDOW_WIDTH = 560
-WINDOW_HEIGHT = 560
+WINDOW_HEIGHT = 648
+
+WAVE_WIDTH = WINDOW_WIDTH - 48  # container inner width
+WAVE_HEIGHT = 56
 
 
 class AudioBoostApp:
@@ -73,6 +77,10 @@ class AudioBoostApp:
         self._analysis_pending: list[QueueItem] = []
         self._analysis_lock = threading.Lock()
         self._analysis_thread: threading.Thread | None = None
+        self._wave_item: QueueItem | None = None
+        self._wave_gen = 0
+        self._wave_photos: dict[str, tk.PhotoImage] = {}
+        self._wave_tmpdir = tempfile.mkdtemp(prefix="audioboost_wave_")
         saved_label = load_settings().get("target")
         self._current_target: LoudnessTarget = next(
             (t for t in TARGETS if t.label == saved_label), DEFAULT_TARGET
@@ -157,6 +165,9 @@ class AudioBoostApp:
 
         # --- queue list (packs lazily when at least one file is queued)
         self._build_queue_list(container)
+
+        # --- waveform strip (packs lazily once a waveform renders)
+        self._build_waveform_strip(container)
 
         # --- inline error (packs lazily)
         self.inline_error_var = tk.StringVar(value="")
@@ -405,6 +416,87 @@ class AudioBoostApp:
             if self._listbox_scroll.winfo_ismapped():
                 self._listbox_scroll.pack_forget()
 
+    # ---------- waveform strip ----------
+
+    def _build_waveform_strip(self, parent: tk.Widget) -> None:
+        p = self.palette
+        self.wave_section = ttk.Frame(parent)
+        # Packed lazily in _apply_waveform once a render lands.
+
+        self.wave_caption_var = tk.StringVar(value="")
+        ttk.Label(
+            self.wave_section, textvariable=self.wave_caption_var,
+            style="Muted.TLabel",
+        ).pack(anchor="w")
+
+        wave_wrap = tk.Frame(self.wave_section, bg=p.drop_border, bd=0)
+        wave_wrap.pack(fill="x", pady=(6, 0))
+        self.wave_strip = tk.Canvas(
+            wave_wrap,
+            width=WAVE_WIDTH,
+            height=WAVE_HEIGHT,
+            bg=p.drop_bg,
+            highlightthickness=0,
+            bd=0,
+        )
+        self.wave_strip.pack(padx=1, pady=1)
+
+    def _show_waveform_for(self, item: QueueItem) -> None:
+        """Make `item` the strip's subject and render its source waveform."""
+        self._wave_item = item
+        self._wave_gen += 1
+        self._wave_photos.clear()
+        self._render_waveform_async(
+            item.path, self.palette.drop_hint, "source", self._wave_gen, item
+        )
+
+    def _render_waveform_async(
+        self, media_path: str, color: str, layer: str, gen: int, item: QueueItem
+    ) -> None:
+        def worker() -> None:
+            try:
+                ffmpeg = find_ffmpeg()
+                out_png = os.path.join(self._wave_tmpdir, f"{layer}_{gen}.png")
+                subprocess.run(
+                    waveform_png_args(
+                        ffmpeg, media_path, out_png,
+                        width=WAVE_WIDTH, height=WAVE_HEIGHT, color=color,
+                    ),
+                    capture_output=True, timeout=60, check=True,
+                )
+            except Exception:
+                return  # preview is best-effort
+            self.root.after(0, self._apply_waveform, layer, gen, item, out_png)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _apply_waveform(
+        self, layer: str, gen: int, item: QueueItem, png_path: str
+    ) -> None:
+        if gen != self._wave_gen or item is not self._wave_item:
+            return
+        try:
+            self._wave_photos[layer] = tk.PhotoImage(file=png_path)
+        except tk.TclError:
+            return
+        self.wave_strip.delete("all")
+        for name in ("source", "boosted"):
+            photo = self._wave_photos.get(name)
+            if photo is not None:
+                self.wave_strip.create_image(0, 0, anchor="nw", image=photo)
+        suffix = "  ·  boosted" if "boosted" in self._wave_photos else ""
+        self.wave_caption_var.set(f"{item.basename}{suffix}")
+        if not self.wave_section.winfo_ismapped():
+            self.wave_section.pack(fill="x", pady=(14, 0), before=self.progress)
+
+    def _hide_waveform(self) -> None:
+        self._wave_item = None
+        self._wave_gen += 1
+        self._wave_photos.clear()
+        self.wave_caption_var.set("")
+        if self.wave_section.winfo_ismapped():
+            self.wave_section.pack_forget()
+
     # ---------- primary button (Label-based pill — aqua-proof) ----------
 
     def _make_primary_button(self, parent: tk.Widget, text: str, command) -> tk.Label:
@@ -627,6 +719,7 @@ class AudioBoostApp:
         self.status_label.configure(text="", style="Muted.TLabel")
         self._clear_error()
         self._hide_completion_buttons()
+        self._hide_waveform()
         self._refresh_queue_list()
 
     # ---------- background loudness analysis ----------
@@ -675,6 +768,7 @@ class AudioBoostApp:
         # Don't clobber the header mid-batch; worker refreshes carry an index.
         if not (self._worker and self._worker.is_alive()):
             self._refresh_queue_list()
+            self._show_waveform_for(item)
 
     # ---------- inline error ----------
 
@@ -821,6 +915,13 @@ class AudioBoostApp:
             self._queue[idx].status = STATUS_DONE
             self._queue[idx].output_path = output_path
         self._refresh_queue_list(processing_index=idx)
+        # Waveform strip follows the file that just finished: source in
+        # muted gray, boosted output overlaid in accent.
+        if item is not self._wave_item:
+            self._show_waveform_for(item)
+        self._render_waveform_async(
+            output_path, self.palette.accent, "boosted", self._wave_gen, item
+        )
 
     def _on_item_failed(
         self, idx: int, item: QueueItem,

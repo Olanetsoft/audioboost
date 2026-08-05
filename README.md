@@ -37,6 +37,10 @@ install prompt if it's missing.
 5. Each output lands next to its source as `<name>_boosted.mp4`. If that
    name is taken the app appends `_2`, `_3`, etc.
 
+A waveform strip appears under the queue: gray is the source audio, and
+once a file finishes the boosted output is overlaid in indigo — the
+loudness change is visible at a glance.
+
 If a single file in the batch fails, the rest still process. **Cancel** stops
 after the current file. Click **Show in Finder** to reveal the first output,
 or **Process another** to clear the queue.
@@ -171,5 +175,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports and focused PRs welcome.
 ## Planned
 
 - ML-based noise removal (RNNoise / Demucs)
-- Waveform preview before/after
 - Bundled FFmpeg for zero-dependency install

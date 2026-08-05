@@ -18,6 +18,7 @@ from ffmpeg_utils import (
     parse_loudnorm_json,
     parse_progress_line,
     probe_file,
+    waveform_png_args,
 )
 
 
@@ -314,6 +315,46 @@ class ParseProgressLineTest(unittest.TestCase):
             parse_progress_line("label=a=b=c"),
             ("label", "a=b=c"),
         )
+
+
+# ---------------------------------------------------------------------------
+# waveform_png_args
+# ---------------------------------------------------------------------------
+
+
+class WaveformPngArgsTest(unittest.TestCase):
+    def _args(self, color: str = "#6366f1") -> list:
+        return waveform_png_args(
+            "/usr/bin/ffmpeg", "/tmp/in.mp4", "/tmp/out.png",
+            width=512, height=56, color=color,
+        )
+
+    def test_input_and_output_paths(self):
+        args = self._args()
+        self.assertEqual(args[args.index("-i") + 1], "/tmp/in.mp4")
+        self.assertEqual(args[-1], "/tmp/out.png")
+
+    def test_renders_single_frame(self):
+        args = self._args()
+        self.assertEqual(args[args.index("-frames:v") + 1], "1")
+
+    def test_filter_downmixes_to_mono_and_sizes_canvas(self):
+        args = self._args()
+        graph = args[args.index("-filter_complex") + 1]
+        self.assertIn("aformat=channel_layouts=mono", graph)
+        self.assertIn("showwavespic=s=512x56", graph)
+
+    def test_css_hex_color_converts_to_ffmpeg_spelling(self):
+        graph = self._args("#a5b4fc")[
+            self._args("#a5b4fc").index("-filter_complex") + 1
+        ]
+        self.assertIn("colors=0xa5b4fc", graph)
+        self.assertNotIn("#", graph)
+
+    def test_color_without_hash_passes_through(self):
+        args = self._args("6b7280")
+        graph = args[args.index("-filter_complex") + 1]
+        self.assertIn("colors=0x6b7280", graph)
 
 
 # ---------------------------------------------------------------------------
