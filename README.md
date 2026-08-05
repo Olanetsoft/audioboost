@@ -63,20 +63,22 @@ A macOS notification is posted when processing starts and again when it
 finishes. The process prints per-file progress to stdout and exits 0 on
 success, non-zero on any failure.
 
-### Right-click in Finder (Quick Action)
+### Right-click in Finder (Quick Actions)
 
-Install the Quick Action once to get a **Boost Audio with AudioBoost** item
-in Finder's right-click menu:
+Install once to get three items in Finder's right-click menu — one per
+loudness target:
 
 ```bash
 ./quick_action/install.sh
 ```
 
 Then right-click any `.mp4` / `.mov` / `.mkv` / `.webm` file → **Quick
-Actions** → **Boost Audio with AudioBoost**. The workflow wraps the CLI
-above, so notifications appear and the output lands next to the source.
+Actions** → **Boost Audio · YouTube**, **· Podcast**, or **· Broadcast**.
+Each workflow wraps the CLI above with the matching `--target`, so
+notifications appear and the output lands next to the source.
 
-Uninstall with `./quick_action/install.sh --uninstall`.
+Uninstall with `./quick_action/install.sh --uninstall` (also removes the
+pre-split single "Boost Audio with AudioBoost" item if present).
 
 ## What it does under the hood
 

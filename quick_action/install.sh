@@ -1,49 +1,71 @@
 #!/usr/bin/env bash
-# Install the AudioBoost Finder Quick Action into ~/Library/Services.
+# Install the AudioBoost Finder Quick Actions into ~/Library/Services.
+# One menu item per loudness target: YouTube (-14), Podcast (-16),
+# Broadcast (-23).
 #
 # Usage:
-#   ./quick_action/install.sh         # install / replace
+#   ./quick_action/install.sh         # install / replace all three
 #   ./quick_action/install.sh --uninstall
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WORKFLOW_SRC="$SCRIPT_DIR/AudioBoost.workflow"
 SERVICES_DIR="$HOME/Library/Services"
-WORKFLOW_DST="$SERVICES_DIR/AudioBoost.workflow"
+
+WORKFLOWS=(
+  "Boost Audio - YouTube.workflow"
+  "Boost Audio - Podcast.workflow"
+  "Boost Audio - Broadcast.workflow"
+)
+# Single-workflow name from before the per-target split; always cleaned up.
+LEGACY="AudioBoost.workflow"
+
+flush_services_cache() {
+  /System/Library/CoreServices/pbs -flush >/dev/null 2>&1 || true
+}
 
 if [[ "${1:-}" == "--uninstall" ]]; then
-  if [[ -d "$WORKFLOW_DST" ]]; then
-    rm -rf "$WORKFLOW_DST"
-    /System/Library/CoreServices/pbs -flush >/dev/null 2>&1 || true
-    echo "✓ Removed $WORKFLOW_DST"
+  removed=0
+  for wf in "${WORKFLOWS[@]}" "$LEGACY"; do
+    if [[ -d "$SERVICES_DIR/$wf" ]]; then
+      rm -rf "$SERVICES_DIR/$wf"
+      echo "✓ Removed $SERVICES_DIR/$wf"
+      removed=1
+    fi
+  done
+  if [[ "$removed" == 0 ]]; then
+    echo "Nothing to uninstall."
   else
-    echo "Nothing to uninstall — no workflow at $WORKFLOW_DST"
+    flush_services_cache
   fi
   exit 0
 fi
 
-if [[ ! -d "$WORKFLOW_SRC" ]]; then
-  echo "Workflow source not found at $WORKFLOW_SRC" >&2
-  exit 1
-fi
+for wf in "${WORKFLOWS[@]}"; do
+  if [[ ! -d "$SCRIPT_DIR/$wf" ]]; then
+    echo "Workflow source not found: $SCRIPT_DIR/$wf" >&2
+    exit 1
+  fi
+done
 
 mkdir -p "$SERVICES_DIR"
 
-if [[ -d "$WORKFLOW_DST" ]]; then
-  rm -rf "$WORKFLOW_DST"
-fi
-cp -R "$WORKFLOW_SRC" "$WORKFLOW_DST"
+# Drop the pre-split single workflow so users don't get four menu items.
+rm -rf "$SERVICES_DIR/$LEGACY"
 
-# Rebuild the Services cache so the menu item shows up without logout.
-/System/Library/CoreServices/pbs -flush >/dev/null 2>&1 || true
+for wf in "${WORKFLOWS[@]}"; do
+  rm -rf "$SERVICES_DIR/$wf"
+  cp -R "$SCRIPT_DIR/$wf" "$SERVICES_DIR/$wf"
+  echo "✓ Installed $wf"
+done
 
-echo "✓ Installed AudioBoost Quick Action"
+flush_services_cache
+
 echo ""
 echo "Try it:"
 echo "  1. Open Finder"
 echo "  2. Right-click any .mp4 / .mov / .mkv / .webm file"
-echo "  3. Quick Actions → Boost Audio with AudioBoost"
+echo "  3. Quick Actions → Boost Audio · YouTube / Podcast / Broadcast"
 echo ""
-echo "If the menu item is missing, sign out and back in (macOS caches Services"
-echo "aggressively) or run \`killall Finder\` then right-click again."
+echo "If the menu items are missing, sign out and back in (macOS caches"
+echo "Services aggressively) or run \`killall Finder\` then right-click again."

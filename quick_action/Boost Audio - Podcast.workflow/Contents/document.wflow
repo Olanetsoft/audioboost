@@ -65,7 +65,7 @@ if [ ! -d "$APP_PATH" ]; then
   osascript -e 'display alert "AudioBoost not found" message "Install /Applications/AudioBoost.app and try again." as critical'
   exit 1
 fi
-"$APP_PATH/Contents/MacOS/AudioBoost" --cli "$@"</string>
+"$APP_PATH/Contents/MacOS/AudioBoost" --cli --target podcast "$@"</string>
 					<key>CheckedForUserDefaultShell</key>
 					<true/>
 					<key>inputMethod</key>
@@ -90,15 +90,15 @@ fi
 				<key>Class Name</key>
 				<string>RunShellScriptAction</string>
 				<key>InputUUID</key>
-				<string>B1F8A3C1-0001-0000-0000-000000000001</string>
+				<string>B2F8A3C2-0001-0000-0000-000000000001</string>
 				<key>Keywords</key>
 				<array>
 					<string>Shell</string>
 				</array>
 				<key>OutputUUID</key>
-				<string>B1F8A3C1-0002-0000-0000-000000000002</string>
+				<string>B2F8A3C2-0002-0000-0000-000000000002</string>
 				<key>UUID</key>
-				<string>B1F8A3C1-0003-0000-0000-000000000003</string>
+				<string>B2F8A3C2-0003-0000-0000-000000000003</string>
 				<key>UnlocalizedApplications</key>
 				<array>
 					<string>Automator</string>

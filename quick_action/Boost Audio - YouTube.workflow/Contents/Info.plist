@@ -8,7 +8,7 @@
 			<key>NSMenuItem</key>
 			<dict>
 				<key>default</key>
-				<string>Boost Audio with AudioBoost</string>
+				<string>Boost Audio · YouTube</string>
 			</dict>
 			<key>NSMessage</key>
 			<string>runWorkflowAsService</string>
