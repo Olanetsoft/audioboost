@@ -69,7 +69,7 @@ export const Features: React.FC<{ rowAts: number[] }> = ({ rowAts }) => {
           const a = interpolate(frame, [rowAts[i], rowAts[i] + 16], [0, 1], {
             extrapolateLeft: "clamp",
             extrapolateRight: "clamp",
-            easing: Easing.bezier(0.16, 1, 0.3, 1),
+            easing: Easing.bezier(0.34, 1.45, 0.5, 1),
           });
           const isCurrent =
             frame >= rowAts[i] &&
@@ -81,8 +81,9 @@ export const Features: React.FC<{ rowAts: number[] }> = ({ rowAts }) => {
                 display: "flex",
                 alignItems: "center",
                 gap: 26,
-                opacity: a * (isCurrent ? 1 : 0.55),
+                opacity: Math.min(1, a) * (isCurrent ? 1 : 0.55),
                 translate: `${(1 - a) * 46}px 0px`,
+                scale: String(isCurrent ? 1.03 : 1),
               }}
             >
               <div

@@ -1,6 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Easing, interpolate, useCurrentFrame } from "remotion";
 import { Glyph } from "../components/Glyph";
+import { Wordmark } from "../components/Wordmark";
 import { T } from "../theme";
 
 export const Hook: React.FC = () => {
@@ -18,11 +19,15 @@ export const Hook: React.FC = () => {
       <div
         style={{
           fontFamily: T.mono,
-          fontSize: 30,
-          letterSpacing: "0.42em",
+          fontSize: 28,
+          letterSpacing: `${interpolate(frame, [2, 26], [0.9, 0.44], {
+            extrapolateLeft: "clamp",
+            extrapolateRight: "clamp",
+            easing: Easing.bezier(0.16, 1, 0.3, 1),
+          })}em`,
           color: T.accent,
           textTransform: "uppercase",
-          opacity: interpolate(frame, [2, 14], [0, 1], {
+          opacity: interpolate(frame, [2, 16], [0, 1], {
             extrapolateLeft: "clamp",
             extrapolateRight: "clamp",
           }),
@@ -30,36 +35,16 @@ export const Hook: React.FC = () => {
       >
         Announcing
       </div>
-      <Glyph scale={1.4} appearFrom={6} />
-      <div
-        style={{
-          fontFamily: T.display,
-          fontWeight: 700,
-          fontSize: 92,
-          letterSpacing: "0.14em",
-          color: T.text,
-          opacity: interpolate(frame, [16, 34], [0, 1], {
-            extrapolateLeft: "clamp",
-            extrapolateRight: "clamp",
-            easing: Easing.bezier(0.16, 1, 0.3, 1),
-          }),
-          translate: interpolate(frame, [16, 34], ["0px 26px", "0px 0px"], {
-            extrapolateLeft: "clamp",
-            extrapolateRight: "clamp",
-            easing: Easing.bezier(0.16, 1, 0.3, 1),
-          }),
-        }}
-      >
-        AUDIO<span style={{ color: T.accent }}>BOOST</span>
-      </div>
+      <Glyph scale={1.4} appearFrom={8} />
+      <Wordmark from={14} />
       <div
         style={{
           fontFamily: T.mono,
-          fontSize: 26,
-          letterSpacing: "0.32em",
+          fontSize: 25,
+          letterSpacing: "0.3em",
           color: T.faint,
           textTransform: "uppercase",
-          opacity: interpolate(frame, [30, 48], [0, 1], {
+          opacity: interpolate(frame, [40, 58], [0, 1], {
             extrapolateLeft: "clamp",
             extrapolateRight: "clamp",
           }),

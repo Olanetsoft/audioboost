@@ -1,6 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Easing, interpolate, useCurrentFrame } from "remotion";
 import { Glyph } from "../components/Glyph";
+import { Wordmark } from "../components/Wordmark";
 import { T } from "../theme";
 
 export const Outro: React.FC = () => {
@@ -22,18 +23,7 @@ export const Outro: React.FC = () => {
       }}
     >
       <Glyph scale={1.1} appearFrom={0} />
-      <div
-        style={{
-          fontFamily: T.display,
-          fontWeight: 700,
-          fontSize: 84,
-          letterSpacing: "0.14em",
-          color: T.text,
-          opacity: appear(8, 24),
-        }}
-      >
-        AUDIO<span style={{ color: T.accent }}>BOOST</span>
-      </div>
+      <Wordmark size={84} from={6} />
       <div
         style={{
           fontFamily: T.ui,

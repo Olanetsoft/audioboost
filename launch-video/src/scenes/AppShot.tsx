@@ -25,9 +25,11 @@ export const AppShot: React.FC = () => {
         gap: 44,
       }}
     >
-      {/* the app window */}
+      {/* the app window — gentle float + one specular sheen pass */}
       <div
         style={{
+          position: "relative",
+          overflow: "hidden",
           width: 760,
           borderRadius: 22,
           background: T.panel,
@@ -36,9 +38,26 @@ export const AppShot: React.FC = () => {
           padding: "34px 38px 38px",
           opacity: enter,
           scale: String(0.94 + 0.06 * enter),
-          translate: `0px ${(1 - enter) * 30}px`,
+          translate: `0px ${(1 - enter) * 30 + Math.sin(frame / 22) * 5}px`,
         }}
       >
+        <div
+          style={{
+            position: "absolute",
+            top: -80,
+            bottom: -80,
+            width: 150,
+            left: interpolate(frame, [34, 78], [-220, 900], {
+              extrapolateLeft: "clamp",
+              extrapolateRight: "clamp",
+              easing: Easing.bezier(0.3, 0, 0.4, 1),
+            }),
+            rotate: "14deg",
+            background:
+              "linear-gradient(90deg, transparent, rgba(231,239,236,0.05), transparent)",
+            pointerEvents: "none",
+          }}
+        />
         {/* faceplate */}
         <div
           style={{

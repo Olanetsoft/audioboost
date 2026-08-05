@@ -17,7 +17,7 @@ export const Boost: React.FC<{ sweepFrom: number }> = ({ sweepFrom }) => {
     extrapolateRight: "clamp",
     easing: Easing.bezier(0.3, 0, 0.2, 1),
   });
-  const lufs = interpolate(frame, [sweepFrom, sweepFrom + 58], [-45.5, -14.0], {
+  const lufs = interpolate(frame, [sweepFrom, sweepFrom + 58], [-46.7, -14.0], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing: Easing.bezier(0.3, 0, 0.2, 1),

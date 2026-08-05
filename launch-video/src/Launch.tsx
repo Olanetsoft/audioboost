@@ -8,6 +8,7 @@ import {
   useCurrentFrame,
 } from "remotion";
 import { Audio } from "@remotion/media";
+import { SceneFade } from "./components/SceneFade";
 import { Hook } from "./scenes/Hook";
 import { Problem } from "./scenes/Problem";
 import { Boost } from "./scenes/Boost";
@@ -51,24 +52,36 @@ export const Launch: React.FC = () => {
 
   return (
     <AbsoluteFill style={{ background: T.bg, fontFamily: T.ui }}>
-      {/* scenes */}
+      {/* scenes — each cross-fades at its edges */}
       <Sequence from={HOOK_START} durationInFrames={PROBLEM_START - HOOK_START} name="Hook">
-        <Hook />
+        <SceneFade dur={PROBLEM_START - HOOK_START}>
+          <Hook />
+        </SceneFade>
       </Sequence>
       <Sequence from={PROBLEM_START} durationInFrames={BOOST_START - PROBLEM_START} name="Problem">
-        <Problem listenFrom={QUIET_AT - PROBLEM_START} />
+        <SceneFade dur={BOOST_START - PROBLEM_START}>
+          <Problem listenFrom={QUIET_AT - PROBLEM_START} />
+        </SceneFade>
       </Sequence>
       <Sequence from={BOOST_START} durationInFrames={APP_START - BOOST_START} name="Boost">
-        <Boost sweepFrom={BOOSTED_AT - BOOST_START} />
+        <SceneFade dur={APP_START - BOOST_START}>
+          <Boost sweepFrom={BOOSTED_AT - BOOST_START} />
+        </SceneFade>
       </Sequence>
       <Sequence from={APP_START} durationInFrames={FEATURES_START - APP_START} name="AppShot">
-        <AppShot />
+        <SceneFade dur={FEATURES_START - APP_START}>
+          <AppShot />
+        </SceneFade>
       </Sequence>
       <Sequence from={FEATURES_START} durationInFrames={OUTRO_START - FEATURES_START} name="Features">
-        <Features rowAts={FEATURE_ATS.map((f) => f - FEATURES_START)} />
+        <SceneFade dur={OUTRO_START - FEATURES_START}>
+          <Features rowAts={FEATURE_ATS.map((f) => f - FEATURES_START)} />
+        </SceneFade>
       </Sequence>
       <Sequence from={OUTRO_START} durationInFrames={TOTAL_FRAMES - OUTRO_START} name="Outro">
-        <Outro />
+        <SceneFade dur={TOTAL_FRAMES - OUTRO_START}>
+          <Outro />
+        </SceneFade>
       </Sequence>
 
       {/* narration — offsets derived from measured durations (timeline.ts) */}
@@ -80,6 +93,19 @@ export const Launch: React.FC = () => {
       <Audio src={staticFile("vo_explain.wav")} from={EXPLAIN_AT} name="VO explain" />
       {/* feature VO + clicks live inside the Features scene */}
       <Audio src={staticFile("vo_cta.wav")} from={CTA_AT} name="VO cta" />
+
+      {/* very subtle ambient bed under everything */}
+      <Audio
+        src={staticFile("music.wav")}
+        volume={(f) =>
+          0.11 *
+          interpolate(f, [TOTAL_FRAMES - 70, TOTAL_FRAMES - 10], [1, 0], {
+            extrapolateLeft: "clamp",
+            extrapolateRight: "clamp",
+          })
+        }
+        name="Music bed"
+      />
 
       <Grain />
 

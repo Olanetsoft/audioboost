@@ -8,11 +8,11 @@ const BAR_COUNT = 56;
  * A speech-like waveform strip. `boost` (0..1) morphs it from a barely
  * visible gray trace into full teal bars — the product moment.
  */
-export const WaveRow: React.FC<{
+const Bars: React.FC<{
   boost: number;
-  width?: number;
-  height?: number;
-}> = ({ boost, width = 1280, height = 220 }) => {
+  width: number;
+  height: number;
+}> = ({ boost, width, height }) => {
   const frame = useCurrentFrame();
 
   return (
@@ -63,6 +63,40 @@ export const WaveRow: React.FC<{
           />
         );
       })}
+    </div>
+  );
+};
+
+/**
+ * A speech-like waveform strip with a soft floor reflection. `boost` (0..1)
+ * morphs it from a barely visible gray trace into full teal bars.
+ */
+export const WaveRow: React.FC<{
+  boost: number;
+  width?: number;
+  height?: number;
+}> = ({ boost, width = 1280, height = 220 }) => {
+  return (
+    <div style={{ position: "relative" }}>
+      <Bars boost={boost} width={width} height={height} />
+      <div
+        style={{
+          position: "absolute",
+          top: "100%",
+          left: 0,
+          opacity: 0.14,
+          // eslint-disable-next-line @remotion/no-string-transforms
+          transform: "scaleY(-0.55)",
+          transformOrigin: "top",
+          WebkitMaskImage:
+            "linear-gradient(to bottom, rgba(0,0,0,0.8), transparent 70%)",
+          maskImage:
+            "linear-gradient(to bottom, rgba(0,0,0,0.8), transparent 70%)",
+          pointerEvents: "none",
+        }}
+      >
+        <Bars boost={boost} width={width} height={height} />
+      </div>
     </div>
   );
 };
