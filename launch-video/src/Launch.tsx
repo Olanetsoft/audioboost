@@ -9,7 +9,6 @@ import {
 } from "remotion";
 import { Audio } from "@remotion/media";
 import { SceneFade } from "./components/SceneFade";
-import { Hook } from "./scenes/Hook";
 import { Problem } from "./scenes/Problem";
 import { Boost } from "./scenes/Boost";
 import { AppShot } from "./scenes/AppShot";
@@ -17,7 +16,6 @@ import { Features } from "./scenes/Features";
 import { Outro } from "./scenes/Outro";
 import { T } from "./theme";
 import {
-  ANNOUNCE_AT,
   APP_START,
   BOOSTED_AT,
   BOOST_START,
@@ -25,7 +23,6 @@ import {
   EXPLAIN_AT,
   FEATURES_START,
   FEATURE_ATS,
-  HOOK_START,
   OUTRO_START,
   PROBLEM_AT,
   PROBLEM_START,
@@ -53,11 +50,6 @@ export const Launch: React.FC = () => {
   return (
     <AbsoluteFill style={{ background: T.bg, fontFamily: T.ui }}>
       {/* scenes — each cross-fades at its edges */}
-      <Sequence from={HOOK_START} durationInFrames={PROBLEM_START - HOOK_START} name="Hook">
-        <SceneFade dur={PROBLEM_START - HOOK_START}>
-          <Hook />
-        </SceneFade>
-      </Sequence>
       <Sequence from={PROBLEM_START} durationInFrames={BOOST_START - PROBLEM_START} name="Problem">
         <SceneFade dur={BOOST_START - PROBLEM_START}>
           <Problem listenFrom={QUIET_AT - PROBLEM_START} />
@@ -85,7 +77,6 @@ export const Launch: React.FC = () => {
       </Sequence>
 
       {/* narration — offsets derived from measured durations (timeline.ts) */}
-      <Audio src={staticFile("vo_announce.wav")} from={ANNOUNCE_AT} name="VO announce" />
       <Audio src={staticFile("vo_problem.wav")} from={PROBLEM_AT} name="VO problem" />
       <Audio src={staticFile("quiet.wav")} from={QUIET_AT} name="Quiet take" />
       <Audio src={staticFile("vo_reveal.wav")} from={REVEAL_AT} name="VO reveal" />

@@ -7,11 +7,8 @@ export const FPS = 30;
 const fr = (s: number) => Math.round(s * FPS);
 const GAP = 8; // breath between VO beats
 
-export const HOOK_START = 0;
-export const ANNOUNCE_AT = 6;
-
-export const PROBLEM_START = ANNOUNCE_AT + fr(t.vo_announce) + GAP;
-export const PROBLEM_AT = PROBLEM_START + 4;
+export const PROBLEM_START = 0;
+export const PROBLEM_AT = PROBLEM_START + 10;
 export const QUIET_AT = PROBLEM_AT + fr(t.vo_problem) + GAP;
 
 export const BOOST_START = QUIET_AT + fr(t.quiet) + 14;
