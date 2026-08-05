@@ -293,6 +293,14 @@ class QueueItemTest(unittest.TestCase):
         row = _item("/tmp/x.mp4", size=1024 * 1024).display_row()
         self.assertIn("1.0 MB", row)
 
+    def test_display_row_without_measurement_omits_lufs(self):
+        self.assertNotIn("LUFS", _item("/tmp/x.mp4").display_row())
+
+    def test_display_row_with_measurement_shows_lufs(self):
+        item = _item("/tmp/x.mp4")
+        item.measured_lufs = -28.45
+        self.assertIn("-28.4 LUFS", item.display_row())
+
 
 class FormatQueueHeaderTest(unittest.TestCase):
     def test_empty_queue_returns_empty_string(self):

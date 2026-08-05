@@ -367,6 +367,78 @@ class VideoCodecCompatTest(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
+class AnalyzeAndMeasuredReuseTest(unittest.TestCase):
+    """Pass-1-only analysis and measured-reuse in process_file."""
+
+    _PROBE = ProbeResult(duration_seconds=5.0, has_audio=True, video_codec="h264")
+
+    def test_analyze_returns_measured_dict(self):
+        with patch("processor.find_ffmpeg", return_value="/usr/bin/ffmpeg"), \
+             patch("processor.probe_file", return_value=self._PROBE), \
+             patch("processor.subprocess.Popen",
+                   return_value=_fake_popen(stderr_lines=[SAMPLE_LOUDNORM_JSON])):
+            measured = Processor().analyze("/tmp/x.mp4")
+        self.assertEqual(measured["input_i"], "-28.45")
+        self.assertEqual(measured["target_offset"], "0.02")
+
+    def test_analyze_no_audio_raises(self):
+        silent = ProbeResult(duration_seconds=5.0, has_audio=False, video_codec="h264")
+        with patch("processor.find_ffmpeg", return_value="/usr/bin/ffmpeg"), \
+             patch("processor.probe_file", return_value=silent):
+            with self.assertRaises(NoAudioStreamError):
+                Processor().analyze("/tmp/silent.mp4")
+
+    def test_analyze_wraps_ffprobe_error(self):
+        with patch("processor.find_ffmpeg", return_value="/usr/bin/ffmpeg"), \
+             patch("processor.probe_file", side_effect=FFprobeError("bad")):
+            with self.assertRaises(ProcessingError):
+                Processor().analyze("/tmp/x.mp4")
+
+    def test_process_file_with_measured_skips_pass1(self):
+        captured: list[list[str]] = []
+
+        def popen_side_effect(cmd, *args, **kwargs):
+            captured.append(cmd)
+            return _fake_popen(
+                stdout_lines=["out_time_ms=0\nprogress=end\n"],
+                stderr_lines=["ok\n"],
+            )
+
+        measured = {
+            "input_i": "-31.00", "input_tp": "-9.00", "input_lra": "4.00",
+            "input_thresh": "-41.00", "target_offset": "0.10",
+        }
+        with patch("processor.find_ffmpeg", return_value="/usr/bin/ffmpeg"), \
+             patch("processor.probe_file", return_value=self._PROBE), \
+             patch("processor._unique_output_path", return_value="/tmp/out.mp4"), \
+             patch("processor.subprocess.Popen", side_effect=popen_side_effect):
+            processor.process_file("/tmp/in.mp4", measured=measured)
+
+        self.assertEqual(len(captured), 1, "pass 1 must be skipped")
+        af = captured[0][captured[0].index("-af") + 1]
+        self.assertIn("measured_I=-31.00", af)
+        self.assertIn("offset=0.10", af)
+
+    def test_process_file_without_measured_still_runs_two_passes(self):
+        captured: list[list[str]] = []
+
+        def popen_side_effect(cmd, *args, **kwargs):
+            captured.append(cmd)
+            if "-vn" in cmd:
+                return _fake_popen(stderr_lines=[SAMPLE_LOUDNORM_JSON])
+            return _fake_popen(
+                stdout_lines=["progress=end\n"], stderr_lines=["ok\n"]
+            )
+
+        with patch("processor.find_ffmpeg", return_value="/usr/bin/ffmpeg"), \
+             patch("processor.probe_file", return_value=self._PROBE), \
+             patch("processor._unique_output_path", return_value="/tmp/out.mp4"), \
+             patch("processor.subprocess.Popen", side_effect=popen_side_effect):
+            processor.process_file("/tmp/in.mp4")
+
+        self.assertEqual(len(captured), 2)
+
+
 class ProcessFileErrorPathsTest(unittest.TestCase):
     def test_no_audio_stream_raises_specific_exception(self):
         with patch("processor.find_ffmpeg", return_value="/usr/bin/ffmpeg"), \

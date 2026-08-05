@@ -120,12 +120,37 @@ class Processor:
         if self._cancelled:
             raise ProcessingCancelled()
 
+    def analyze(
+        self,
+        input_path: str,
+        *,
+        target: LoudnessTarget = DEFAULT_TARGET,
+    ) -> dict:
+        """Run pass 1 only and return the measured loudness values.
+
+        The result is exactly what pass 2 needs — pass it back to
+        process_file(measured=...) to skip re-analysis. Note that
+        target_offset in the result is specific to `target`; reuse the
+        measurement only when processing with the same target.
+        """
+        ffmpeg = find_ffmpeg()
+        try:
+            probe = probe_file(input_path)
+        except FFprobeError as exc:
+            raise ProcessingError(
+                f"Could not read file: {exc}", stderr_tail=""
+            ) from exc
+        if not probe.has_audio:
+            raise NoAudioStreamError("This video has no audio track to process.")
+        return self._run_pass1(ffmpeg, input_path, target)
+
     def process_file(
         self,
         input_path: str,
         progress_cb: ProgressCallback | None = None,
         *,
         target: LoudnessTarget = DEFAULT_TARGET,
+        measured: dict | None = None,
     ) -> ProcessResult:
         if progress_cb is None:
             progress_cb = lambda _s, _p: None
@@ -143,8 +168,9 @@ class Processor:
         duration_seconds = probe.duration_seconds or 0.0
 
         self._check_cancelled()
-        progress_cb("Analyzing loudness…", -1.0)
-        measured = self._run_pass1(ffmpeg, input_path, target)
+        if measured is None:
+            progress_cb("Analyzing loudness…", -1.0)
+            measured = self._run_pass1(ffmpeg, input_path, target)
 
         self._check_cancelled()
         output_path = _unique_output_path(input_path)
@@ -331,9 +357,12 @@ def process_file(
     progress_cb: ProgressCallback | None = None,
     *,
     target: LoudnessTarget = DEFAULT_TARGET,
+    measured: dict | None = None,
 ) -> ProcessResult:
     """Convenience wrapper for one-shot processing without cancellation."""
-    return Processor().process_file(input_path, progress_cb, target=target)
+    return Processor().process_file(
+        input_path, progress_cb, target=target, measured=measured
+    )
 
 
 __all__ = [

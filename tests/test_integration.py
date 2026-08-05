@@ -238,6 +238,25 @@ class EndToEndTest(unittest.TestCase):
                 measured, TARGET_PODCAST.integrated_lufs, delta=0.5
             )
 
+    def test_analyze_then_reuse_measurement_lands_on_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "quiet.mp4")
+            _synth_quiet_mp4(src)
+
+            p = Processor()
+            measured = p.analyze(src, target=TARGET_YOUTUBE)
+            # The synthesized tone is quiet; measured input must be well
+            # below target.
+            self.assertLess(float(measured["input_i"]),
+                            TARGET_YOUTUBE.integrated_lufs - 5)
+
+            result = process_file(src, target=TARGET_YOUTUBE, measured=measured)
+            out_lufs = _measure_integrated_lufs(result.output_path, TARGET_YOUTUBE)
+            self.assertAlmostEqual(
+                out_lufs, TARGET_YOUTUBE.integrated_lufs, delta=0.5,
+                msg="cached-measurement path must still hit the target",
+            )
+
     def test_cancel_removes_partial_output(self):
         with tempfile.TemporaryDirectory() as tmp:
             src = os.path.join(tmp, "quiet.mp4")

@@ -136,6 +136,12 @@ class QueueItem:
     status: str = STATUS_PENDING
     output_path: str | None = None
     error_message: str | None = None
+    # Pass-1 analysis cache: the loudnorm measurement dict, the target label
+    # it was measured against (offset is target-specific), and the input
+    # loudness parsed out for display.
+    measured: dict | None = None
+    measured_target: str | None = None
+    measured_lufs: float | None = None
 
     @property
     def basename(self) -> str:
@@ -144,7 +150,10 @@ class QueueItem:
     def display_row(self) -> str:
         """Single-line representation for a tk.Listbox row."""
         icon = _STATUS_ICONS.get(self.status, "•")
-        return f"  {icon}  {self.basename}  ·  {human_size(self.size_bytes)}"
+        row = f"  {icon}  {self.basename}  ·  {human_size(self.size_bytes)}"
+        if self.measured_lufs is not None:
+            row += f"  ·  {self.measured_lufs:.1f} LUFS"
+        return row
 
 
 def format_queue_header(

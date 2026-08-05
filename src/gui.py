@@ -70,6 +70,9 @@ class AudioBoostApp:
         self._queue: list[QueueItem] = []
         self._processor: Processor | None = None
         self._worker: threading.Thread | None = None
+        self._analysis_pending: list[QueueItem] = []
+        self._analysis_lock = threading.Lock()
+        self._analysis_thread: threading.Thread | None = None
         saved_label = load_settings().get("target")
         self._current_target: LoudnessTarget = next(
             (t for t in TARGETS if t.label == saved_label), DEFAULT_TARGET
@@ -580,12 +583,14 @@ class AudioBoostApp:
         except OSError:
             size_bytes = 0
 
-        self._queue.append(QueueItem(path=path, size_bytes=size_bytes))
+        item = QueueItem(path=path, size_bytes=size_bytes)
+        self._queue.append(item)
         self._set_primary_enabled(True)
         self.progress_var.set(0.0)
         self.status_label.configure(text="Ready", style="Muted.TLabel")
         self._hide_completion_buttons()
         self._refresh_queue_list()
+        self._schedule_analysis(item)
 
     def _clear_selection(self) -> None:
         self._queue.clear()
@@ -595,6 +600,53 @@ class AudioBoostApp:
         self._clear_error()
         self._hide_completion_buttons()
         self._refresh_queue_list()
+
+    # ---------- background loudness analysis ----------
+
+    def _schedule_analysis(self, item: QueueItem) -> None:
+        with self._analysis_lock:
+            self._analysis_pending.append(item)
+        if self._analysis_thread and self._analysis_thread.is_alive():
+            return
+        self._analysis_thread = threading.Thread(
+            target=self._analysis_main, daemon=True
+        )
+        self._analysis_thread.start()
+
+    def _analysis_main(self) -> None:
+        """Sequentially analyze queued files; results are best-effort."""
+        while True:
+            with self._analysis_lock:
+                if not self._analysis_pending:
+                    return
+                item = self._analysis_pending.pop(0)
+            # Skip if the queue was cleared or a batch has started — the
+            # processing path runs its own pass 1 when there's no cache.
+            if item not in self._queue:
+                continue
+            if self._worker and self._worker.is_alive():
+                continue
+            target = self._current_target
+            try:
+                measured = Processor().analyze(item.path, target=target)
+                lufs = float(measured["input_i"])
+            except Exception:
+                continue
+            self.root.after(
+                0, self._apply_analysis, item, measured, target.label, lufs
+            )
+
+    def _apply_analysis(
+        self, item: QueueItem, measured: dict, target_label: str, lufs: float
+    ) -> None:
+        if item not in self._queue:
+            return
+        item.measured = measured
+        item.measured_target = target_label
+        item.measured_lufs = lufs
+        # Don't clobber the header mid-batch; worker refreshes carry an index.
+        if not (self._worker and self._worker.is_alive()):
+            self._refresh_queue_list()
 
     # ---------- inline error ----------
 
@@ -625,7 +677,13 @@ class AudioBoostApp:
         self._set_segments_enabled(False)
         self.cancel_button.pack(side="left", padx=(8, 0))
 
+        # Drop queued preview analyses — processing runs pass 1 itself
+        # whenever an item has no cached measurement.
+        with self._analysis_lock:
+            self._analysis_pending.clear()
+
         # Reset statuses on a fresh run (e.g. after a partial/failed batch).
+        # The measurement cache survives — that's what makes re-runs fast.
         for item in self._queue:
             item.status = STATUS_PENDING
             item.error_message = None
@@ -667,9 +725,14 @@ class AudioBoostApp:
             def progress_cb(label: str, pct: float, _idx: int = idx) -> None:
                 self.root.after(0, self._apply_progress, label, pct, _idx)
 
+            cached = (
+                item.measured
+                if item.measured_target == target.label
+                else None
+            )
             try:
                 result = self._processor.process_file(
-                    item.path, progress_cb, target=target
+                    item.path, progress_cb, target=target, measured=cached
                 )
             except ProcessingCancelled:
                 self.root.after(0, self._on_item_cancelled, idx, item)
