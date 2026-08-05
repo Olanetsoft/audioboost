@@ -18,11 +18,22 @@ OPTIONS = {
         "NSHighResolutionCapable": True,
         "CFBundleDocumentTypes": [
             {
-                "CFBundleTypeName": "MPEG-4 Video",
+                "CFBundleTypeName": "Video",
                 "CFBundleTypeRole": "Editor",
-                "LSItemContentTypes": ["public.mpeg-4"],
+                "LSItemContentTypes": [
+                    "public.mpeg-4",
+                    "com.apple.quicktime-movie",
+                    "public.movie",
+                ],
                 "LSHandlerRank": "Alternate",
-            }
+            },
+            {
+                # MKV/WebM have no system UTI — match by extension.
+                "CFBundleTypeName": "Matroska / WebM Video",
+                "CFBundleTypeRole": "Editor",
+                "CFBundleTypeExtensions": ["mkv", "webm"],
+                "LSHandlerRank": "Alternate",
+            },
         ],
     },
     "packages": ["tkinterdnd2"],

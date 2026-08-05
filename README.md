@@ -30,8 +30,9 @@ install prompt if it's missing.
 2. (Optional) pick a loudness target: **YouTube -14**, **Podcast -16**, or
    **Broadcast -23**.
 3. Drag one or more `.mp4` / `.mov` / `.mkv` / `.webm` files onto the drop
-   zone (or click to choose). Files stack into a queue with per-file status
-   (pending → processing → done / failed).
+   zone (or click to choose). Dropping files on the Dock icon and Finder's
+   **Open With → AudioBoost** work too. Files stack into a queue with
+   per-file status (pending → processing → done / failed).
 4. Click **Boost Audio**.
 5. Each output lands next to its source as `<name>_boosted.mp4`. If that
    name is taken the app appends `_2`, `_3`, etc.

@@ -84,7 +84,22 @@ class AudioBoostApp:
         self._build_style()
         self._build_layout()
 
+        # macOS delivers open-document Apple Events (Dock drop, Finder
+        # "Open With", `open -a AudioBoost file.mp4`) to this Tcl proc.
+        try:
+            self.root.createcommand(
+                "::tk::mac::OpenDocument", self._on_open_documents
+            )
+        except tk.TclError:
+            pass
+
         self.root.after(100, self._check_ffmpeg_on_launch)
+
+    def _on_open_documents(self, *paths: str) -> None:
+        for path in paths:
+            self._accept_file(path)
+        self.root.deiconify()
+        self.root.lift()
 
     # ---------- styling & layout ----------
 
@@ -585,12 +600,25 @@ class AudioBoostApp:
 
         item = QueueItem(path=path, size_bytes=size_bytes)
         self._queue.append(item)
-        self._set_primary_enabled(True)
-        self.progress_var.set(0.0)
-        self.status_label.configure(text="Ready", style="Muted.TLabel")
-        self._hide_completion_buttons()
-        self._refresh_queue_list()
-        self._schedule_analysis(item)
+        # Files can arrive mid-batch (Dock drop, Open With). Queue them
+        # quietly — they run on the next Boost — without re-enabling the
+        # primary button or clobbering the in-flight status text.
+        busy = bool(self._worker and self._worker.is_alive())
+        if not busy:
+            self._set_primary_enabled(True)
+            self.progress_var.set(0.0)
+            self.status_label.configure(text="Ready", style="Muted.TLabel")
+            self._hide_completion_buttons()
+            self._refresh_queue_list()
+            self._schedule_analysis(item)
+        else:
+            self._refresh_queue_list(
+                processing_index=next(
+                    (i for i, q in enumerate(self._queue)
+                     if q.status == STATUS_PROCESSING),
+                    None,
+                )
+            )
 
     def _clear_selection(self) -> None:
         self._queue.clear()
