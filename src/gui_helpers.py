@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 def human_size(nbytes: int) -> str:

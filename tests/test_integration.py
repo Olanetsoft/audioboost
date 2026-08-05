@@ -250,7 +250,7 @@ class EndToEndTest(unittest.TestCase):
             def cb(label: str, _pct: float) -> None:
                 events.append(label)
                 # Trigger cancel as soon as we see pass 2 start.
-                if "Processing" in label and not p._cancelled:
+                if "Processing" in label and not p.cancelled:
                     p.cancel()
 
             with self.assertRaises(ProcessingCancelled):

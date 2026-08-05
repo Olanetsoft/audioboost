@@ -463,7 +463,7 @@ class CancellationTest(unittest.TestCase):
         p = Processor()
         p.cancel()  # must not raise
         p.cancel()  # idempotent
-        self.assertTrue(p._cancelled)  # internal flag set
+        self.assertTrue(p.cancelled)
 
     def test_cancel_terminates_current_subprocess(self):
         p = Processor()

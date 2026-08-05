@@ -24,3 +24,4 @@ dist/
 
 # Tool state
 .claude/
+.midnight-expert/

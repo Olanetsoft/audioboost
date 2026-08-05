@@ -17,7 +17,6 @@ from gui_helpers import (
     STATUS_PENDING,
     STATUS_PROCESSING,
     format_queue_header,
-    human_size,
     is_dark_mode,
     parse_dnd_paths,
     summarize_completion,
@@ -654,7 +653,7 @@ class AudioBoostApp:
         """
         assert self._processor is not None
         for idx, item in enumerate(items):
-            if self._processor._cancelled:
+            if self._processor.cancelled:
                 break
 
             self.root.after(0, self._on_item_start, idx, item)

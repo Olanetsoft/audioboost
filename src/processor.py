@@ -103,6 +103,10 @@ class Processor:
         self._cancelled = False
         self._lock = threading.Lock()
 
+    @property
+    def cancelled(self) -> bool:
+        return self._cancelled
+
     def cancel(self) -> None:
         with self._lock:
             self._cancelled = True
