@@ -125,7 +125,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.cli:
         return _run_cli(args.files, args.target)
 
-    from gui import run_app
+    from webgui import run_app
     initial_file = args.files[0] if args.files else None
     run_app(initial_file=initial_file)
     return 0

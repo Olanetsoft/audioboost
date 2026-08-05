@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AudioBoost</title>
+<style>
+  /* ---------- tokens ---------- */
+  :root {
+    --bg: #0b0c11;
+    --bg-glow: rgba(124, 134, 255, 0.07);
+    --panel: #13151d;
+    --panel-2: #171a24;
+    --line: #232633;
+    --line-soft: #1c1f2b;
+    --text: #e8e9f0;
+    --muted: #8b8fa3;
+    --faint: #565b6e;
+    --accent: #7c86ff;
+    --accent-strong: #5b63f0;
+    --accent-soft: rgba(124, 134, 255, 0.12);
+    --accent-glow: rgba(124, 134, 255, 0.35);
+    --success: #43d17c;
+    --danger: #ff6b6b;
+    --amber: #ffc46b;
+    --display: "Futura", "Avenir Next Condensed", "Avenir Next", sans-serif;
+    --ui: "Avenir Next", "Avenir", "Helvetica Neue", sans-serif;
+    --mono: "SF Mono", ui-monospace, "Menlo", monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #eef0f5;
+      --bg-glow: rgba(81, 88, 232, 0.06);
+      --panel: #fbfbfd;
+      --panel-2: #f3f4f9;
+      --line: #dcdfe8;
+      --line-soft: #e5e8f0;
+      --text: #191b26;
+      --muted: #6a6f82;
+      --faint: #a2a7b8;
+      --accent: #5158e8;
+      --accent-strong: #4046d6;
+      --accent-soft: rgba(81, 88, 232, 0.10);
+      --accent-glow: rgba(81, 88, 232, 0.25);
+      --success: #14934f;
+      --danger: #c33a3a;
+      --amber: #a86b12;
+    }
+  }
+
+  /* ---------- base ---------- */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--ui);
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: default;
+  }
+  /* fine grain over everything */
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+    opacity: 0.025;
+    pointer-events: none;
+    z-index: 10;
+  }
+  /* soft glow behind the deck */
+  body::after {
+    content: "";
+    position: fixed; inset: 0;
+    background: radial-gradient(520px 340px at 50% 26%, var(--bg-glow), transparent 70%);
+    pointer-events: none;
+  }
+
+  .shell {
+    position: relative;
+    max-width: 536px;
+    margin: 0 auto;
+    padding: 28px 24px 24px;
+    z-index: 1;
+  }
+
+  /* ---------- staggered entry ---------- */
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .rise { animation: rise 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+  .d1 { animation-delay: 0.05s; } .d2 { animation-delay: 0.12s; }
+  .d3 { animation-delay: 0.19s; } .d4 { animation-delay: 0.26s; }
+
+  /* ---------- faceplate ---------- */
+  header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--line-soft);
+    margin-bottom: 20px;
+  }
+  .wordmark {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 26px;
+    letter-spacing: 0.14em;
+  }
+  .wordmark em { font-style: normal; color: var(--accent); }
+  .model {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    color: var(--faint);
+    text-transform: uppercase;
+  }
+  .led {
+    display: inline-block;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--faint);
+    margin-right: 7px;
+    vertical-align: 1px;
+    transition: background 0.3s, box-shadow 0.3s;
+  }
+  body[data-state="busy"] .led {
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent-glow);
+    animation: blink 1.1s ease-in-out infinite;
+  }
+  body[data-state="done"] .led { background: var(--success); box-shadow: 0 0 8px rgba(67,209,124,0.4); }
+  @keyframes blink { 50% { opacity: 0.45; } }
+
+  /* ---------- ffmpeg banner ---------- */
+  .banner {
+    display: none;
+    align-items: center; gap: 10px;
+    background: color-mix(in srgb, var(--amber) 9%, transparent);
+    border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 16px;
+    font-size: 12.5px;
+    color: var(--amber);
+  }
+  .banner.show { display: flex; }
+  .banner code {
+    font-family: var(--mono); font-size: 11.5px;
+    background: rgba(0,0,0,0.25);
+    padding: 2px 7px; border-radius: 5px;
+  }
+  .banner button {
+    margin-left: auto;
+    font-size: 11px;
+  }
+
+  /* ---------- target selector ---------- */
+  .field-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin-bottom: 8px;
+  }
+  .segmented {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    padding: 3px;
+    margin-bottom: 20px;
+  }
+  .segmented .thumb {
+    position: absolute;
+    top: 3px; bottom: 3px; left: 3px;
+    width: calc((100% - 6px) / 3);
+    background: var(--accent-strong);
+    border-radius: 8px;
+    box-shadow: 0 2px 12px var(--accent-glow);
+    transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+    z-index: 0;
+  }
+  .segmented button {
+    position: relative; z-index: 1;
+    font-family: var(--ui);
+    font-size: 13px; font-weight: 600;
+    color: var(--muted);
+    background: none; border: 0;
+    padding: 9px 0 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: color 0.2s;
+  }
+  .segmented button .lufs {
+    font-family: var(--mono);
+    font-size: 11px; font-weight: 400;
+    opacity: 0.75; margin-left: 5px;
+  }
+  .segmented button.active { color: #fff; }
+  .segmented.locked button { cursor: default; }
+
+  /* ---------- drop zone ---------- */
+  .dropzone {
+    position: relative;
+    border: 1.5px dashed var(--line);
+    border-radius: 16px;
+    background: var(--panel);
+    padding: 34px 20px 30px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.25s, background 0.25s, box-shadow 0.25s;
+    margin-bottom: 18px;
+  }
+  .dropzone:hover { border-color: var(--faint); }
+  .dropzone.dragover {
+    border-color: var(--accent);
+    border-style: solid;
+    background: var(--panel-2);
+    box-shadow: 0 0 0 4px var(--accent-soft), 0 8px 40px -12px var(--accent-glow);
+  }
+  .glyph {
+    display: flex; align-items: center; justify-content: center;
+    gap: 5px; height: 48px; margin-bottom: 16px;
+  }
+  .glyph span {
+    display: block;
+    width: 7px;
+    border-radius: 4px;
+    background: var(--accent);
+    transform-origin: center;
+    animation: breathe 3.4s ease-in-out infinite alternate;
+  }
+  @keyframes breathe {
+    from { transform: scaleY(0.82); opacity: 0.75; }
+    to   { transform: scaleY(1.06); opacity: 1; }
+  }
+  @keyframes dance {
+    from { transform: scaleY(0.45); }
+    to   { transform: scaleY(1.15); }
+  }
+  body[data-state="busy"] .glyph span {
+    animation: dance 0.42s ease-in-out infinite alternate;
+  }
+  body[data-state="done"] .glyph span {
+    animation: none;
+    background: var(--success);
+    transition: background 0.5s;
+  }
+  .dz-title { font-size: 16px; font-weight: 600; letter-spacing: 0.01em; }
+  .dz-hint {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    color: var(--faint);
+    margin-top: 7px;
+    text-transform: uppercase;
+  }
+  /* once a queue exists the zone collapses into a slim add-more strip */
+  body.has-queue .dropzone { padding: 13px 16px; border-radius: 12px; }
+  body.has-queue .glyph { display: none; }
+  body.has-queue .dz-title { font-size: 13px; display: inline; }
+  body.has-queue .dz-hint { display: inline; margin: 0 0 0 10px; letter-spacing: 0.1em; }
+
+  /* ---------- queue ---------- */
+  .queue { display: none; margin-bottom: 18px; }
+  .queue.show { display: block; }
+  .queue-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .queue-title { font-family: var(--mono); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--faint); }
+  .rows {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    max-height: 178px;
+    overflow-y: auto;
+  }
+  .row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line-soft);
+    font-size: 13px;
+  }
+  .row:last-child { border-bottom: 0; }
+  .dot {
+    flex: none;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--faint);
+  }
+  .row.processing .dot { background: var(--accent); box-shadow: 0 0 6px var(--accent-glow); animation: blink 1s infinite; }
+  .row.done .dot { background: var(--success); }
+  .row.failed .dot { background: var(--danger); }
+  .row .name {
+    flex: 1;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-weight: 500;
+  }
+  .row.processing .name { color: var(--accent); }
+  .row.failed .name { color: var(--danger); }
+  .row .meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    flex: none;
+  }
+  .row .chip {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 5px;
+    padding: 2px 6px;
+    flex: none;
+  }
+  .row .err {
+    display: block;
+    font-size: 11px;
+    color: var(--danger);
+    opacity: 0.85;
+    margin-top: 2px;
+    white-space: normal;
+  }
+
+  /* ---------- waveform ---------- */
+  .wave { display: none; margin-bottom: 18px; }
+  .wave.show { display: block; }
+  .wave-caption {
+    display: flex; gap: 8px; align-items: baseline;
+    font-family: var(--mono); font-size: 10px;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--faint);
+    margin-bottom: 8px;
+  }
+  .wave-caption .tag { color: var(--accent); }
+  .wave-frame {
+    position: relative;
+    height: 64px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .wave-frame img {
+    position: absolute; inset: 6px 10px;
+    width: calc(100% - 20px); height: calc(100% - 12px);
+    object-fit: fill;
+  }
+  .wave-frame img.source { opacity: 0.55; }
+  .wave-frame img.boosted {
+    filter: drop-shadow(0 0 7px var(--accent-glow));
+    animation: rise 0.5s ease both;
+  }
+
+  /* ---------- progress & status ---------- */
+  .rail {
+    height: 3px;
+    background: var(--line-soft);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+  .rail .fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent-strong), var(--accent));
+    border-radius: 2px;
+    transition: width 0.25s ease;
+  }
+  .rail.indeterminate .fill {
+    width: 40%;
+    animation: slide 1.1s ease-in-out infinite;
+  }
+  @keyframes slide {
+    from { transform: translateX(-110%); }
+    to   { transform: translateX(280%); }
+  }
+  .status {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    min-height: 16px;
+    margin-bottom: 16px;
+  }
+  .status .summary.ok { color: var(--success); }
+  .status .summary.bad { color: var(--danger); }
+  .error-line { font-size: 12px; color: var(--danger); margin-bottom: 10px; display: none; }
+  .error-line.show { display: block; }
+  details.err-detail { margin-bottom: 12px; display: none; }
+  details.err-detail.show { display: block; }
+  details.err-detail summary {
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--faint); cursor: pointer;
+    letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  details.err-detail pre {
+    margin-top: 8px;
+    font-family: var(--mono); font-size: 10.5px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px;
+    max-height: 140px;
+    overflow: auto;
+    white-space: pre-wrap;
+    color: var(--muted);
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  /* ---------- actions ---------- */
+  .actions { display: flex; gap: 10px; align-items: center; }
+  button { font-family: var(--ui); }
+  .btn {
+    border: 0;
+    border-radius: 10px;
+    padding: 11px 22px;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.12s ease, box-shadow 0.2s, background 0.2s, opacity 0.2s;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn.primary {
+    background: var(--accent-strong);
+    color: #fff;
+    box-shadow: 0 4px 20px -6px var(--accent-glow);
+  }
+  .btn.primary:hover:not(:disabled) { background: var(--accent); box-shadow: 0 6px 26px -6px var(--accent-glow); }
+  .btn.primary:disabled {
+    background: var(--panel-2);
+    color: var(--faint);
+    box-shadow: none;
+    cursor: default;
+  }
+  .btn.ghost {
+    background: none;
+    border: 1px solid var(--line);
+    color: var(--muted);
+  }
+  .btn.ghost:hover { border-color: var(--faint); color: var(--text); }
+  .btn.mini {
+    padding: 4px 10px;
+    font-size: 11px;
+    border-radius: 7px;
+  }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body data-state="idle">
+  <div class="shell">
+    <header class="rise d1">
+      <div>
+        <div class="wordmark">AUDIO<em>BOOST</em></div>
+        <div class="model" style="margin-top:4px">LN·14 — Loudness Normalizer</div>
+      </div>
+      <div class="model"><span class="led" id="led"></span><span id="ledText">READY</span></div>
+    </header>
+
+    <div class="banner" id="ffmpegBanner">
+      <span>FFmpeg missing —</span> <code>brew install ffmpeg</code>
+      <button class="btn ghost mini" onclick="copyBrew()">copy</button>
+    </div>
+
+    <section class="rise d2">
+      <div class="field-label">Loudness target</div>
+      <div class="segmented" id="segmented">
+        <div class="thumb" id="thumb"></div>
+      </div>
+    </section>
+
+    <section class="dropzone rise d3" id="dropzone">
+      <div class="glyph" id="glyph"></div>
+      <div class="dz-title">Drop video here</div>
+      <div class="dz-hint">MP4 · MOV · MKV · WEBM — or click to browse</div>
+    </section>
+
+    <section class="queue" id="queue">
+      <div class="queue-head">
+        <span class="queue-title" id="queueTitle">Queue</span>
+        <button class="btn ghost mini" id="clearBtn" onclick="api('clear')">clear all</button>
+      </div>
+      <div class="rows" id="rows"></div>
+    </section>
+
+    <section class="wave" id="wave">
+      <div class="wave-caption">
+        <span>Waveform</span>
+        <span id="waveName"></span>
+        <span class="tag hidden" id="waveTag">· Boosted</span>
+      </div>
+      <div class="wave-frame" id="waveFrame"></div>
+    </section>
+
+    <section class="rise d4">
+      <div class="rail" id="rail"><div class="fill" id="fill"></div></div>
+      <div class="status">
+        <span id="progressLabel"></span>
+        <span class="summary" id="summary"></span>
+      </div>
+      <div class="error-line" id="errorLine"></div>
+      <details class="err-detail" id="errDetail">
+        <summary>ffmpeg output</summary>
+        <pre id="errPre"></pre>
+      </details>
+      <div class="actions">
+        <button class="btn primary" id="startBtn" onclick="api('start')" disabled>Boost Audio</button>
+        <button class="btn ghost hidden" id="cancelBtn" onclick="api('cancel')">Cancel</button>
+        <button class="btn ghost hidden" id="finderBtn" onclick="api('show_in_finder')">Show in Finder</button>
+        <button class="btn ghost hidden" id="againBtn" onclick="api('clear')">Process another</button>
+      </div>
+    </section>
+  </div>
+
+<script>
+  // ---------- living glyph ----------
+  const HEIGHTS = [10, 18, 26, 34, 40, 44, 40, 34, 26, 18, 10];
+  const glyph = document.getElementById("glyph");
+  HEIGHTS.forEach((h, i) => {
+    const bar = document.createElement("span");
+    bar.style.height = h + "px";
+    bar.style.animationDelay = (i * 0.09) + "s";
+    glyph.appendChild(bar);
+  });
+
+  // ---------- api bridge ----------
+  function api(method, ...args) {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api[method]) {
+      return window.pywebview.api[method](...args);
+    }
+    return Promise.resolve();
+  }
+  function copyBrew() { api("copy_text", "brew install ffmpeg"); }
+
+  // ---------- render ----------
+  const el = id => document.getElementById(id);
+  let last = null;
+
+  window.AB = {
+    push(state) { last = state; render(state); }
+  };
+
+  function render(s) {
+    // machine state drives the LED + glyph
+    const anyDone = s.queue.some(q => q.status === "done");
+    const allSettled = s.queue.length > 0 && !s.busy && s.summary;
+    document.body.dataset.state = s.busy ? "busy" : (allSettled && anyDone ? "done" : "idle");
+    el("ledText").textContent = s.busy ? "RUN" : (allSettled ? "DONE" : "READY");
+    document.body.classList.toggle("has-queue", s.queue.length > 0);
+    dz.querySelector(".dz-title").textContent =
+      s.queue.length ? "Add more" : "Drop video here";
+
+    // ffmpeg banner
+    el("ffmpegBanner").classList.toggle("show", s.ffmpegMissing);
+
+    // segmented control
+    const seg = el("segmented");
+    const existing = seg.querySelectorAll("button");
+    if (existing.length !== s.targets.length) {
+      existing.forEach(b => b.remove());
+      s.targets.forEach(t => {
+        const b = document.createElement("button");
+        b.innerHTML = `${t.label}<span class="lufs">${t.lufs.toFixed(0)}</span>`;
+        b.onclick = () => api("set_target", t.label);
+        seg.appendChild(b);
+      });
+    }
+    const idx = Math.max(0, s.targets.findIndex(t => t.active));
+    el("thumb").style.transform = `translateX(${idx * 100}%)`;
+    seg.querySelectorAll("button").forEach((b, i) => b.classList.toggle("active", i === idx));
+    seg.classList.toggle("locked", s.busy);
+
+    // queue
+    el("queue").classList.toggle("show", s.queue.length > 0);
+    el("queueTitle").textContent =
+      s.queue.length ? `Queue · ${s.queue.length} file${s.queue.length > 1 ? "s" : ""}` : "Queue";
+    el("clearBtn").classList.toggle("hidden", s.busy);
+    const rows = el("rows");
+    rows.innerHTML = "";
+    s.queue.forEach(q => {
+      const row = document.createElement("div");
+      row.className = `row ${q.status}`;
+      const lufs = q.lufs != null ? `<span class="chip">${q.lufs.toFixed(1)} LUFS</span>` : "";
+      const err = q.error ? `<span class="err">${q.error}</span>` : "";
+      row.innerHTML = `<span class="dot"></span>
+        <span class="name">${q.name}${err}</span>
+        ${lufs}
+        <span class="meta">${q.size}</span>`;
+      rows.appendChild(row);
+    });
+
+    // waveform
+    const hasWave = !!(s.wave && s.wave.source);
+    el("wave").classList.toggle("show", hasWave);
+    if (hasWave) {
+      el("waveName").textContent = s.wave.name;
+      el("waveTag").classList.toggle("hidden", !s.wave.boosted);
+      const frame = el("waveFrame");
+      const want =
+        `<img class="source" src="${s.wave.source}">` +
+        (s.wave.boosted ? `<img class="boosted" src="${s.wave.boosted}">` : "");
+      if (frame.dataset.rendered !== want) {
+        frame.innerHTML = want;
+        frame.dataset.rendered = want;
+      }
+    }
+
+    // progress
+    const rail = el("rail");
+    const indeterminate = s.busy && s.progress.pct < 0;
+    rail.classList.toggle("indeterminate", indeterminate);
+    el("fill").style.width = indeterminate ? "40%" : `${Math.max(0, s.progress.pct)}%`;
+    el("progressLabel").textContent = s.progress.label || "";
+
+    const summary = el("summary");
+    summary.textContent = s.summary || "";
+    summary.className = "summary " +
+      (s.summary.startsWith("✓") ? "ok" : (s.summary.startsWith("Failed") ? "bad" : ""));
+
+    // errors
+    el("errorLine").textContent = s.error || "";
+    el("errorLine").classList.toggle("show", !!s.error);
+    el("errDetail").classList.toggle("show", !!s.errorDetail);
+    el("errPre").textContent = s.errorDetail || "";
+
+    // actions
+    el("startBtn").disabled = !s.canStart;
+    el("cancelBtn").classList.toggle("hidden", !s.busy);
+    el("finderBtn").classList.toggle("hidden", !(s.anySaved && !s.busy));
+    el("againBtn").classList.toggle("hidden", !(s.summary && !s.busy));
+  }
+
+  // ---------- drop zone ----------
+  const dz = el("dropzone");
+  dz.addEventListener("click", () => { if (!last || !last.busy) api("browse"); });
+
+  ["dragenter", "dragover"].forEach(evt =>
+    dz.addEventListener(evt, e => { e.preventDefault(); dz.classList.add("dragover"); }));
+  ["dragleave", "drop"].forEach(evt =>
+    dz.addEventListener(evt, e => { e.preventDefault(); dz.classList.remove("dragover"); }));
+  window.addEventListener("dragover", e => e.preventDefault());
+  window.addEventListener("drop", e => e.preventDefault());
+
+  dz.addEventListener("drop", e => {
+    const paths = [];
+    for (const f of e.dataTransfer.files) {
+      const p = f.pywebviewFullPath || f.path;
+      if (p) paths.push(p);
+    }
+    if (paths.length) api("add_files", paths);
+    else api("browse");  // WebKit hid the paths — fall back to the picker
+  });
+
+  // ---------- boot ----------
+  window.addEventListener("pywebviewready", () => {
+    api("get_state").then(s => { if (s) render(s); });
+  });
+</script>
+</body>
+</html>

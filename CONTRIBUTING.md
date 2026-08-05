@@ -6,7 +6,7 @@ way.
 
 ## Ground rules
 
-- Keep dependencies minimal. Python stdlib + `tkinterdnd2` + `py2app` is the
+- Keep dependencies minimal. Python stdlib + `pywebview` + `py2app` is the
   whole surface area today; new runtime deps need a strong justification.
 - Don't re-encode video. Any change must preserve `-c:v copy` behavior. The
   acceptance test is a bit-identical video-stream MD5 before and after.
@@ -15,14 +15,7 @@ way.
 
 ## Dev setup
 
-Requires macOS and FFmpeg (`brew install ffmpeg`) plus a Python with tkinter.
-If you use Homebrew Python, also install the matching Tk formula:
-
-```bash
-brew install python-tk@3.12   # or @3.13
-```
-
-Then:
+Requires macOS, FFmpeg (`brew install ffmpeg`), and Python 3.11+.
 
 ```bash
 git clone https://github.com/Olanetsoft/audioboost.git

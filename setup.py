@@ -3,7 +3,10 @@
 from setuptools import setup
 
 APP = ["src/main.py"]
-DATA_FILES = [("assets", ["src/assets/icon.icns"])]
+DATA_FILES = [
+    ("assets", ["src/assets/icon.icns"]),
+    ("web", ["src/web/index.html"]),
+]
 OPTIONS = {
     "argv_emulation": False,
     "iconfile": "src/assets/icon.icns",
@@ -36,8 +39,7 @@ OPTIONS = {
             },
         ],
     },
-    "packages": ["tkinterdnd2"],
-    "includes": ["tkinter"],
+    "packages": ["webview"],
 }
 
 setup(

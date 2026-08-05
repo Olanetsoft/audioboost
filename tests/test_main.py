@@ -186,7 +186,7 @@ class MainDispatchTest(unittest.TestCase):
     def test_main_dispatches_to_gui_by_default(self):
         fake_run_app = MagicMock()
         fake_gui = MagicMock(run_app=fake_run_app)
-        with patch.dict("sys.modules", {"gui": fake_gui}):
+        with patch.dict("sys.modules", {"webgui": fake_gui}):
             rc = main.main([])
         fake_run_app.assert_called_once_with(initial_file=None)
         self.assertEqual(rc, 0)
@@ -194,7 +194,7 @@ class MainDispatchTest(unittest.TestCase):
     def test_main_passes_first_file_as_initial_to_gui(self):
         fake_run_app = MagicMock()
         fake_gui = MagicMock(run_app=fake_run_app)
-        with patch.dict("sys.modules", {"gui": fake_gui}):
+        with patch.dict("sys.modules", {"webgui": fake_gui}):
             main.main(["a.mp4", "b.mp4"])
         fake_run_app.assert_called_once_with(initial_file="a.mp4")
 

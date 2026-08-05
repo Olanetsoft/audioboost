@@ -111,15 +111,8 @@ playback.
 
 ## Run from source (local UI)
 
-Requires Python 3.11+ with working `tkinter`. Homebrew's `python@3.12` and
-`python@3.13` ship without Tk support — install the matching formula:
-
-```bash
-brew install python-tk@3.12     # or python-tk@3.13
-```
-
-macOS system Python 3.9 at `/usr/bin/python3` already bundles tkinter and also
-works.
+Requires Python 3.11+ (any build — the UI renders in the system WebKit via
+[pywebview](https://pywebview.flowrl.com), no Tk needed).
 
 ```bash
 python3.12 -m venv .venv
@@ -128,7 +121,7 @@ pip install -r requirements.txt
 python src/main.py
 ```
 
-The Tkinter window opens immediately — that's the UI. Drag any `.mp4` onto it.
+The window opens immediately — that's the UI. Drag any `.mp4` onto it.
 
 ### Quick smoke test with a synthesized file
 

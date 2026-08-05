@@ -1,2 +1,2 @@
-tkinterdnd2>=0.4.0
+pywebview>=5.0
 py2app>=0.28
