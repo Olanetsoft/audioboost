@@ -39,7 +39,7 @@ Homebrew locations, with an install prompt when missing.
    name is taken the app appends `_2`, `_3`, etc.
 
 A waveform strip appears under the queue: gray is the source audio, and
-once a file finishes the boosted output is overlaid in indigo — the
+once a file finishes the boosted output is overlaid in teal — the
 loudness change is visible at a glance.
 
 If a single file in the batch fails, the rest still process. **Cancel** stops

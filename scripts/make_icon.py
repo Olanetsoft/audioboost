@@ -21,10 +21,10 @@ CORNER_RADIUS_RATIO = 0.225
 BAR_HEIGHTS = (28, 52, 74, 96, 112, 124, 112, 96, 74, 52, 28)
 
 # Colors — match the app's dark-mode accent scheme.
-BG_TOP = (0x1C, 0x1E, 0x3B)       # deep indigo
-BG_BOTTOM = (0x2A, 0x2D, 0x56)    # warmer mid indigo
-BAR_CORE = (0xA5, 0xB4, 0xFC)     # indigo-300
-BAR_GLOW = (0x81, 0x8C, 0xF8)     # indigo-400 (edge softening)
+BG_TOP = (0x0C, 0x24, 0x1F)       # deep teal charcoal
+BG_BOTTOM = (0x12, 0x3B, 0x33)    # warmer mid teal
+BAR_CORE = (0x6F, 0xF2, 0xD8)     # mint teal
+BAR_GLOW = (0x2F, 0xE0, 0xB8)     # accent teal (edge softening)
 
 
 def _png_chunk(tag: bytes, data: bytes) -> bytes:

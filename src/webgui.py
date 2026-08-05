@@ -127,7 +127,7 @@ def run_app(initial_file: str | None = None) -> None:
         height=WINDOW_HEIGHT,
         min_size=(WINDOW_WIDTH, WINDOW_HEIGHT),
         resizable=True,
-        background_color="#0c0d12",
+        background_color="#0b0f0e",
     )
     api.window = window
 

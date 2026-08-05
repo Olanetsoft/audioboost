@@ -41,8 +41,8 @@ ACCEPTED_EXTENSIONS = (".mp4", ".mov", ".mkv", ".webm", ".m4v")
 
 WAVE_WIDTH = 512
 WAVE_HEIGHT = 56
-WAVE_SOURCE_COLOR = "#5d6070"
-WAVE_BOOSTED_COLOR = "#7c86ff"
+WAVE_SOURCE_COLOR = "#5d7069"
+WAVE_BOOSTED_COLOR = "#2fe0b8"
 
 PushCallback = Callable[[dict], None]
 
