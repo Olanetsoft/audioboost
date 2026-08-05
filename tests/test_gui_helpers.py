@@ -1,6 +1,8 @@
 """Tests for the Tk-free helpers in gui_helpers."""
 
+import os
 import subprocess
+import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -17,7 +19,10 @@ from gui_helpers import (
     format_queue_header,
     human_size,
     is_dark_mode,
+    load_settings,
     parse_dnd_paths,
+    save_settings,
+    settings_path,
     summarize_completion,
 )
 
@@ -200,6 +205,59 @@ class PaletteTest(unittest.TestCase):
         for dark in (True, False):
             p = Palette(dark=dark)
             self.assertNotEqual(p.segment_track, p.segment_bg)
+
+
+# ---------------------------------------------------------------------------
+# Settings persistence
+# ---------------------------------------------------------------------------
+
+
+class SettingsTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.path = os.path.join(self._tmp.name, "nested", "settings.json")
+
+    def test_default_path_is_application_support(self):
+        self.assertTrue(
+            settings_path().endswith(
+                "Library/Application Support/AudioBoost/settings.json"
+            )
+        )
+
+    def test_load_missing_file_returns_empty_dict(self):
+        self.assertEqual(load_settings(self.path), {})
+
+    def test_save_then_load_roundtrip(self):
+        save_settings({"target": "Podcast"}, self.path)
+        self.assertEqual(load_settings(self.path), {"target": "Podcast"})
+
+    def test_save_creates_missing_directories(self):
+        save_settings({"a": 1}, self.path)
+        self.assertTrue(os.path.isfile(self.path))
+
+    def test_save_overwrites_previous_value(self):
+        save_settings({"target": "YouTube"}, self.path)
+        save_settings({"target": "Broadcast"}, self.path)
+        self.assertEqual(load_settings(self.path), {"target": "Broadcast"})
+
+    def test_load_corrupt_json_returns_empty_dict(self):
+        os.makedirs(os.path.dirname(self.path))
+        with open(self.path, "w") as f:
+            f.write("{not json")
+        self.assertEqual(load_settings(self.path), {})
+
+    def test_load_non_dict_json_returns_empty_dict(self):
+        os.makedirs(os.path.dirname(self.path))
+        with open(self.path, "w") as f:
+            f.write('["a", "list"]')
+        self.assertEqual(load_settings(self.path), {})
+
+    def test_save_leaves_no_tmp_file_behind(self):
+        save_settings({"k": "v"}, self.path)
+        self.assertEqual(
+            sorted(os.listdir(os.path.dirname(self.path))), ["settings.json"]
+        )
 
 
 # ---------------------------------------------------------------------------

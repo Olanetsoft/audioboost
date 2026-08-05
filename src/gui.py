@@ -18,6 +18,8 @@ from gui_helpers import (
     STATUS_PROCESSING,
     format_queue_header,
     is_dark_mode,
+    load_settings,
+    save_settings,
     parse_dnd_paths,
     summarize_completion,
 )
@@ -68,7 +70,10 @@ class AudioBoostApp:
         self._queue: list[QueueItem] = []
         self._processor: Processor | None = None
         self._worker: threading.Thread | None = None
-        self._current_target: LoudnessTarget = DEFAULT_TARGET
+        saved_label = load_settings().get("target")
+        self._current_target: LoudnessTarget = next(
+            (t for t in TARGETS if t.label == saved_label), DEFAULT_TARGET
+        )
         self._segment_buttons: dict[LoudnessTarget, tk.Label] = {}
         self._segments_enabled: bool = True
         self._primary_enabled: bool = False
@@ -535,6 +540,7 @@ class AudioBoostApp:
             return
         self._current_target = target
         self._apply_segment_styles()
+        save_settings({**load_settings(), "target": target.label})
 
     def _apply_segment_styles(self) -> None:
         p = self.palette

@@ -6,6 +6,7 @@ otherwise pull in a real Tk runtime on import.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from dataclasses import dataclass
@@ -67,6 +68,43 @@ def is_dark_mode() -> bool:
         return result.returncode == 0 and result.stdout.strip() == "Dark"
     except (OSError, subprocess.TimeoutExpired):
         return False
+
+
+# ---------------------------------------------------------------------------
+# Settings persistence
+# ---------------------------------------------------------------------------
+
+
+def settings_path() -> str:
+    return os.path.expanduser(
+        "~/Library/Application Support/AudioBoost/settings.json"
+    )
+
+
+def load_settings(path: str | None = None) -> dict:
+    """Read settings; any missing/corrupt/foreign content degrades to {}."""
+    try:
+        with open(path or settings_path(), encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_settings(settings: dict, path: str | None = None) -> None:
+    """Write settings atomically; failures are silent (settings are optional)."""
+    target = path or settings_path()
+    tmp = target + ".tmp"
+    try:
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(settings, f, indent=2)
+        os.replace(tmp, target)
+    except OSError:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
 
 
 # ---------------------------------------------------------------------------
