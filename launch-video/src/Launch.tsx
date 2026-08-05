@@ -11,17 +11,29 @@ import { Audio } from "@remotion/media";
 import { Hook } from "./scenes/Hook";
 import { Problem } from "./scenes/Problem";
 import { Boost } from "./scenes/Boost";
+import { AppShot } from "./scenes/AppShot";
 import { Features } from "./scenes/Features";
 import { Outro } from "./scenes/Outro";
 import { T } from "./theme";
+import {
+  ANNOUNCE_AT,
+  APP_START,
+  BOOSTED_AT,
+  BOOST_START,
+  CTA_AT,
+  EXPLAIN_AT,
+  FEATURES_START,
+  FEATURE_ATS,
+  HOOK_START,
+  OUTRO_START,
+  PROBLEM_AT,
+  PROBLEM_START,
+  QUIET_AT,
+  REVEAL_AT,
+  TOTAL_FRAMES,
+} from "./timeline";
 
-// Timeline at 30 fps. Total: 810 frames = 27 s.
-const HOOK_START = 0;
-const PROBLEM_START = 75; // 2.5 s
-const BOOST_START = 225; // 7.5 s
-const FEATURES_START = 525; // 17.5 s
-const OUTRO_START = 675; // 22.5 s
-export const TOTAL_FRAMES = 810;
+export { TOTAL_FRAMES };
 
 const Grain: React.FC = () => (
   <AbsoluteFill
@@ -44,23 +56,30 @@ export const Launch: React.FC = () => {
         <Hook />
       </Sequence>
       <Sequence from={PROBLEM_START} durationInFrames={BOOST_START - PROBLEM_START} name="Problem">
-        <Problem />
+        <Problem listenFrom={QUIET_AT - PROBLEM_START} />
       </Sequence>
-      <Sequence from={BOOST_START} durationInFrames={FEATURES_START - BOOST_START} name="Boost">
-        <Boost />
+      <Sequence from={BOOST_START} durationInFrames={APP_START - BOOST_START} name="Boost">
+        <Boost sweepFrom={BOOSTED_AT - BOOST_START} />
+      </Sequence>
+      <Sequence from={APP_START} durationInFrames={FEATURES_START - APP_START} name="AppShot">
+        <AppShot />
       </Sequence>
       <Sequence from={FEATURES_START} durationInFrames={OUTRO_START - FEATURES_START} name="Features">
-        <Features />
+        <Features rowAts={FEATURE_ATS.map((f) => f - FEATURES_START)} />
       </Sequence>
       <Sequence from={OUTRO_START} durationInFrames={TOTAL_FRAMES - OUTRO_START} name="Outro">
         <Outro />
       </Sequence>
 
-      {/* audio — the quiet take and its AudioBoost-processed versions */}
-      <Audio src={staticFile("quiet.wav")} from={PROBLEM_START + 24} name="Quiet take" />
-      <Audio src={staticFile("boosted.wav")} from={BOOST_START + 26} name="Boosted take" />
-      <Audio src={staticFile("vo_boost.wav")} from={BOOST_START + 126} name="Boost VO" />
-      <Audio src={staticFile("vo_outro.wav")} from={OUTRO_START + 14} name="Outro VO" />
+      {/* narration — offsets derived from measured durations (timeline.ts) */}
+      <Audio src={staticFile("vo_announce.wav")} from={ANNOUNCE_AT} name="VO announce" />
+      <Audio src={staticFile("vo_problem.wav")} from={PROBLEM_AT} name="VO problem" />
+      <Audio src={staticFile("quiet.wav")} from={QUIET_AT} name="Quiet take" />
+      <Audio src={staticFile("vo_reveal.wav")} from={REVEAL_AT} name="VO reveal" />
+      <Audio src={staticFile("boosted.wav")} from={BOOSTED_AT} name="Boosted take" />
+      <Audio src={staticFile("vo_explain.wav")} from={EXPLAIN_AT} name="VO explain" />
+      {/* feature VO + clicks live inside the Features scene */}
+      <Audio src={staticFile("vo_cta.wav")} from={CTA_AT} name="VO cta" />
 
       <Grain />
 

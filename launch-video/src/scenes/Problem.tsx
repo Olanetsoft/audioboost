@@ -3,7 +3,8 @@ import { AbsoluteFill, Easing, interpolate, useCurrentFrame } from "remotion";
 import { WaveRow } from "../components/WaveRow";
 import { T } from "../theme";
 
-export const Problem: React.FC = () => {
+/** `listenFrom` — frame (scene-relative) where the quiet take starts playing. */
+export const Problem: React.FC<{ listenFrom: number }> = ({ listenFrom }) => {
   const frame = useCurrentFrame();
   const appear = (from: number, to: number) =>
     interpolate(frame, [from, to], [0, 1], {
@@ -31,7 +32,7 @@ export const Problem: React.FC = () => {
           translate: `0px ${(1 - appear(4, 22)) * 24}px`,
         }}
       >
-        Ever recorded with the mic too low?
+        You finish a recording… and the mic was too low.
       </div>
 
       <div style={{ opacity: appear(14, 30) }}>
@@ -44,11 +45,18 @@ export const Problem: React.FC = () => {
           alignItems: "baseline",
           gap: 26,
           fontFamily: T.mono,
-          opacity: appear(20, 36),
+          opacity: appear(listenFrom - 6, listenFrom + 8),
         }}
       >
-        <span style={{ fontSize: 30, color: T.faint, letterSpacing: "0.2em" }}>
-          MEASURED
+        <span
+          style={{
+            fontSize: 30,
+            color: T.accent,
+            letterSpacing: "0.2em",
+            opacity: 0.5 + 0.5 * Math.sin(frame / 4) ** 2,
+          }}
+        >
+          ▶ LISTEN
         </span>
         <span style={{ fontSize: 76, color: T.danger, fontWeight: 700 }}>
           −45.5 LUFS

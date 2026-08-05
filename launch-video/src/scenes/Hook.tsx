@@ -15,7 +15,22 @@ export const Hook: React.FC = () => {
         gap: 48,
       }}
     >
-      <Glyph scale={1.4} appearFrom={0} />
+      <div
+        style={{
+          fontFamily: T.mono,
+          fontSize: 30,
+          letterSpacing: "0.42em",
+          color: T.accent,
+          textTransform: "uppercase",
+          opacity: interpolate(frame, [2, 14], [0, 1], {
+            extrapolateLeft: "clamp",
+            extrapolateRight: "clamp",
+          }),
+        }}
+      >
+        Announcing
+      </div>
+      <Glyph scale={1.4} appearFrom={6} />
       <div
         style={{
           fontFamily: T.display,

@@ -3,29 +3,31 @@ import { AbsoluteFill, Easing, interpolate, useCurrentFrame } from "remotion";
 import { WaveRow } from "../components/WaveRow";
 import { T } from "../theme";
 
-export const Boost: React.FC = () => {
+/** `sweepFrom` — frame (scene-relative) where the boosted take starts. */
+export const Boost: React.FC<{ sweepFrom: number }> = ({ sweepFrom }) => {
   const frame = useCurrentFrame();
 
-  // the drop: file chip falls in, then the sweep boosts the waveform
   const drop = interpolate(frame, [0, 22], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing: Easing.bezier(0.34, 1.4, 0.44, 1),
   });
-  const boost = interpolate(frame, [26, 78], [0, 1], {
+  const boost = interpolate(frame, [sweepFrom, sweepFrom + 52], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing: Easing.bezier(0.3, 0, 0.2, 1),
   });
-  const lufs = interpolate(frame, [26, 84], [-45.5, -14.0], {
+  const lufs = interpolate(frame, [sweepFrom, sweepFrom + 58], [-45.5, -14.0], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing: Easing.bezier(0.3, 0, 0.2, 1),
   });
-  const settleGlow = interpolate(frame, [84, 100], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
+  const settleGlow = interpolate(
+    frame,
+    [sweepFrom + 58, sweepFrom + 74],
+    [0, 1],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+  );
 
   return (
     <AbsoluteFill
@@ -79,30 +81,9 @@ export const Boost: React.FC = () => {
         >
           {lufs.toFixed(1)} LUFS
         </span>
-        <span
-          style={{
-            fontSize: 30,
-            color: T.accent,
-            opacity: settleGlow,
-          }}
-        >
+        <span style={{ fontSize: 30, color: T.accent, opacity: settleGlow }}>
           · no clipping
         </span>
-      </div>
-
-      <div
-        style={{
-          fontFamily: T.ui,
-          fontWeight: 600,
-          fontSize: 46,
-          color: T.text,
-          opacity: interpolate(frame, [96, 116], [0, 1], {
-            extrapolateLeft: "clamp",
-            extrapolateRight: "clamp",
-          }),
-        }}
-      >
-        Two-pass EBU R128 · video stream untouched
       </div>
     </AbsoluteFill>
   );

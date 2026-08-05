@@ -10,15 +10,16 @@ import { Audio } from "@remotion/media";
 import { T } from "../theme";
 
 const FEATURES = [
-  "MP4 · MOV · MKV · WebM in — MP4 out",
-  "Batch queue with per-file loudness readout",
+  "Every format — MP4 · MOV · MKV · WebM",
+  "Batch a whole folder at once",
   "YouTube −14 · Podcast −16 · Broadcast −23",
-  "Before / after waveform preview",
-  "FFmpeg bundled — zero setup",
-  "Right-click any video in Finder",
+  "Before / after waveforms",
+  "FFmpeg built in — zero setup",
+  "Right-click, straight from Finder",
 ];
 
-export const Features: React.FC = () => {
+/** `rowAts` — scene-relative frames where each row (and its VO) starts. */
+export const Features: React.FC<{ rowAts: number[] }> = ({ rowAts }) => {
   const frame = useCurrentFrame();
 
   return (
@@ -45,61 +46,69 @@ export const Features: React.FC = () => {
       >
         In the box
       </div>
-      {/* one UI click as each row lands */}
-      {FEATURES.map((f, i) => (
-        <Audio
-          key={`click-${f}`}
-          src={staticFile("click.wav")}
-          from={6 + i * 9}
-          volume={0.55}
-          name={`Click ${i + 1}`}
-        />
+
+      {/* VO + click per row, exactly when it lands */}
+      {FEATURES.map((_, i) => (
+        <React.Fragment key={`sfx-${i}`}>
+          <Audio
+            src={staticFile(`vo_f${i + 1}.wav`)}
+            from={rowAts[i]}
+            name={`Feature VO ${i + 1}`}
+          />
+          <Audio
+            src={staticFile("click.wav")}
+            from={rowAts[i]}
+            volume={0.5}
+            name={`Click ${i + 1}`}
+          />
+        </React.Fragment>
       ))}
+
       <div style={{ display: "flex", flexDirection: "column", gap: 30 }}>
-        {FEATURES.map((f, i) => (
-          <div
-            key={f}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 26,
-              opacity: interpolate(frame, [6 + i * 9, 22 + i * 9], [0, 1], {
-                extrapolateLeft: "clamp",
-                extrapolateRight: "clamp",
-                easing: Easing.bezier(0.16, 1, 0.3, 1),
-              }),
-              translate: `${
-                (1 -
-                  interpolate(frame, [6 + i * 9, 22 + i * 9], [0, 1], {
-                    extrapolateLeft: "clamp",
-                    extrapolateRight: "clamp",
-                    easing: Easing.bezier(0.16, 1, 0.3, 1),
-                  })) *
-                46
-              }px 0px`,
-            }}
-          >
+        {FEATURES.map((f, i) => {
+          const a = interpolate(frame, [rowAts[i], rowAts[i] + 16], [0, 1], {
+            extrapolateLeft: "clamp",
+            extrapolateRight: "clamp",
+            easing: Easing.bezier(0.16, 1, 0.3, 1),
+          });
+          const isCurrent =
+            frame >= rowAts[i] &&
+            (i === FEATURES.length - 1 || frame < rowAts[i + 1]);
+          return (
             <div
+              key={f}
               style={{
-                width: 16,
-                height: 16,
-                borderRadius: 99,
-                background: T.accent,
-                boxShadow: "0 0 16px rgba(47, 224, 184, 0.5)",
-              }}
-            />
-            <div
-              style={{
-                fontFamily: T.ui,
-                fontWeight: 600,
-                fontSize: 52,
-                color: T.text,
+                display: "flex",
+                alignItems: "center",
+                gap: 26,
+                opacity: a * (isCurrent ? 1 : 0.55),
+                translate: `${(1 - a) * 46}px 0px`,
               }}
             >
-              {f}
+              <div
+                style={{
+                  width: 16,
+                  height: 16,
+                  borderRadius: 99,
+                  background: isCurrent ? T.accent : T.faint,
+                  boxShadow: isCurrent
+                    ? "0 0 16px rgba(47, 224, 184, 0.5)"
+                    : "none",
+                }}
+              />
+              <div
+                style={{
+                  fontFamily: T.ui,
+                  fontWeight: 600,
+                  fontSize: 52,
+                  color: isCurrent ? T.text : T.muted,
+                }}
+              >
+                {f}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </AbsoluteFill>
   );
