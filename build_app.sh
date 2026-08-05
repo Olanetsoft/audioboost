@@ -54,6 +54,21 @@ python setup.py py2app
 
 APP="dist/AudioBoost.app"
 
+# Bundle static FFmpeg when vendor binaries were fetched
+# (./scripts/fetch_ffmpeg.sh). Without them the app falls back to the
+# system ffmpeg and shows its install dialog when none exists.
+VENDOR="$(pwd)/vendor/ffmpeg"
+if [[ -x "$VENDOR/ffmpeg" && -x "$VENDOR/ffprobe" ]]; then
+  echo "Bundling static FFmpeg ($("$VENDOR/ffmpeg" -version | head -1 | cut -d' ' -f3))…"
+  mkdir -p "$APP/Contents/Resources/ffmpeg"
+  cp "$VENDOR/ffmpeg" "$VENDOR/ffprobe" "$APP/Contents/Resources/ffmpeg/"
+  for doc in LICENSE README SOURCE.txt; do
+    [[ -f "$VENDOR/$doc" ]] && cp "$VENDOR/$doc" "$APP/Contents/Resources/ffmpeg/"
+  done
+else
+  echo "No vendor/ffmpeg — building without bundled FFmpeg (system fallback)."
+fi
+
 # macOS 26 enforces code-signature validity on Launch Services launches.
 # py2app's default signatures can be missing or stale on nested Mach-O files,
 # which causes the app to quit with SIGKILL (Code Signature Invalid) when
@@ -67,6 +82,9 @@ for py in "$APP"/Contents/Frameworks/Python.framework/Versions/*/Python; do
 done
 [[ -f "$APP/Contents/MacOS/python" ]] && \
   codesign --force --sign - --timestamp=none "$APP/Contents/MacOS/python" >/dev/null 2>&1
+for bin in "$APP/Contents/Resources/ffmpeg/ffmpeg" "$APP/Contents/Resources/ffmpeg/ffprobe"; do
+  [[ -f "$bin" ]] && codesign --force --sign - --timestamp=none "$bin" >/dev/null 2>&1 || true
+done
 codesign --force --sign - --timestamp=none "$APP/Contents/MacOS/AudioBoost" >/dev/null 2>&1
 codesign --force --sign - --timestamp=none "$APP"
 

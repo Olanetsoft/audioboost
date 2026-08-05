@@ -1,7 +1,9 @@
 """Tests for ffmpeg_utils: binary discovery, file probing, output parsing."""
 
 import json
+import os
 import subprocess
+import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -45,6 +47,33 @@ SAMPLE_LOUDNORM_OUTPUT = """
 
 
 class FindFFmpegTest(unittest.TestCase):
+    def setUp(self):
+        # Keep the host's py2app env (if any) from leaking into tests.
+        patcher = patch.dict("ffmpeg_utils.os.environ", clear=False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        import ffmpeg_utils as fu
+        fu.os.environ.pop("RESOURCEPATH", None)
+
+    def test_bundled_binary_takes_precedence_over_path(self):
+        with tempfile.TemporaryDirectory() as res:
+            bundled_dir = os.path.join(res, "ffmpeg")
+            os.makedirs(bundled_dir)
+            bundled = os.path.join(bundled_dir, "ffmpeg")
+            with open(bundled, "w") as f:
+                f.write("#!/bin/sh\n")
+            os.chmod(bundled, 0o755)
+            with patch.dict("ffmpeg_utils.os.environ", {"RESOURCEPATH": res}), \
+                 patch("ffmpeg_utils.shutil.which", return_value="/on/path/ffmpeg"):
+                self.assertEqual(find_ffmpeg(), bundled)
+
+    def test_missing_bundled_binary_falls_back_to_path(self):
+        with tempfile.TemporaryDirectory() as res:
+            # RESOURCEPATH set but no ffmpeg/ dir inside → normal lookup.
+            with patch.dict("ffmpeg_utils.os.environ", {"RESOURCEPATH": res}), \
+                 patch("ffmpeg_utils.shutil.which", return_value="/on/path/ffmpeg"):
+                self.assertEqual(find_ffmpeg(), "/on/path/ffmpeg")
+
     def test_path_hit_takes_precedence(self):
         with patch("ffmpeg_utils.shutil.which", return_value="/custom/ffmpeg"):
             self.assertEqual(find_ffmpeg(), "/custom/ffmpeg")

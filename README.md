@@ -9,12 +9,13 @@ Supports `.mp4`, `.mov`, `.mkv`, and `.webm` input. Output is always MP4.
 
 ## Requirements
 
-- macOS 11 or later
-- [FFmpeg](https://ffmpeg.org) (install with Homebrew: `brew install ffmpeg`)
+- macOS 11 or later (Apple Silicon for the bundled-FFmpeg build)
 
-FFmpeg is not bundled with the app. AudioBoost detects it on PATH or at the standard
-Homebrew locations (`/opt/homebrew/bin/ffmpeg`, `/usr/local/bin/ffmpeg`) and shows an
-install prompt if it's missing.
+Apps built with `./scripts/fetch_ffmpeg.sh` run beforehand are
+**self-contained** — static FFmpeg/FFprobe binaries ship inside the bundle
+and are preferred automatically. Apps built without them fall back to a
+system FFmpeg (`brew install ffmpeg`), detected on PATH or at the standard
+Homebrew locations, with an install prompt when missing.
 
 ## Install
 
@@ -157,11 +158,17 @@ integrated loudness of the output.
 ## Build the .app
 
 ```bash
+./scripts/fetch_ffmpeg.sh   # optional: makes the app self-contained (~124 MB)
 ./build_app.sh
 ```
 
-This creates a virtualenv, installs dependencies, and produces
-`dist/AudioBoost.app`. Override the interpreter with
+`build_app.sh` creates a virtualenv, installs dependencies, and produces
+`dist/AudioBoost.app`. If `vendor/ffmpeg/` exists (populated by
+`fetch_ffmpeg.sh` from a pinned
+[eugeneware/ffmpeg-static](https://github.com/eugeneware/ffmpeg-static)
+release), the static ffmpeg/ffprobe pair is bundled into
+`Contents/Resources/ffmpeg/` and preferred at runtime; otherwise the app
+uses the system FFmpeg (~39 MB bundle). Override the interpreter with
 `PYTHON_BIN=python3.12 ./build_app.sh`.
 
 ## Contributing
@@ -171,6 +178,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports and focused PRs welcome.
 ## License
 
 [MIT](LICENSE) © 2026 Idris Olubisi
+
+The optionally bundled FFmpeg binaries are a **GPL build** of FFmpeg
+(includes libx264) and keep their own license — see
+`Contents/Resources/ffmpeg/LICENSE` and `SOURCE.txt` inside the app.
+AudioBoost invokes them as separate programs, so the app's own code
+remains MIT.
 
 ## Planned
 

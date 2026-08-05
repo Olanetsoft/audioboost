@@ -14,6 +14,9 @@ build/
 dist/
 *.dmg
 
+# Fetched static FFmpeg binaries (scripts/fetch_ffmpeg.sh)
+vendor/
+
 # macOS
 .DS_Store
 

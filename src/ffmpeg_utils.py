@@ -24,7 +24,26 @@ _HOMEBREW_CANDIDATES = (
 )
 
 
+def _bundled_binary(name: str) -> str | None:
+    """Path to a binary shipped inside the .app, or None.
+
+    py2app's launcher exports RESOURCEPATH; build_app.sh places the static
+    ffmpeg/ffprobe pair under Resources/ffmpeg/ when vendor binaries were
+    fetched before the build.
+    """
+    resources = os.environ.get("RESOURCEPATH")
+    if not resources:
+        return None
+    candidate = os.path.join(resources, "ffmpeg", name)
+    if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+        return candidate
+    return None
+
+
 def find_ffmpeg() -> str:
+    bundled = _bundled_binary("ffmpeg")
+    if bundled:
+        return bundled
     path = shutil.which("ffmpeg")
     if path:
         return path
