@@ -1,54 +1,30 @@
-# Remotion video
+# AudioBoost launch video
 
-<p align="center">
-  <a href="https://github.com/remotion-dev/logo">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://github.com/remotion-dev/logo/raw/main/animated-logo-banner-dark.apng">
-      <img alt="Animated Remotion Logo" src="https://github.com/remotion-dev/logo/raw/main/animated-logo-banner-light.gif">
-    </picture>
-  </a>
-</p>
+The [Remotion](https://remotion.dev) source for the launch video posted on
+X/LinkedIn. The narration's before/after demo audio was processed by the
+shipped AudioBoost.app itself.
 
-Welcome to your Remotion project!
+## Render
 
-## Commands
-
-**Install Dependencies**
-
-```console
+```bash
 npm i
+npx remotion render Launch out/audioboost-launch.mp4
 ```
 
-**Start Preview**
+Preview with `npx remotion studio`.
 
-```console
-npm run dev
+## Regenerating the narration
+
+Voice is Deepgram Aura-2 "aurora" via LiveKit Inference. Put your LiveKit
+credentials in `.env` (gitignored — see `.env` keys in
+`scripts/synth_livekit.py`), then:
+
+```bash
+set -a; source .env; set +a
+python scripts/synth_livekit.py /tmp/vo_out
 ```
 
-**Render video**
-
-```console
-npx remotion render
-```
-
-**Upgrade Remotion**
-
-```console
-npx remotion upgrade
-```
-
-## Docs
-
-Get started with Remotion by reading the [fundamentals page](https://www.remotion.dev/docs/the-fundamentals).
-
-## Help
-
-We provide help on our [Discord server](https://discord.gg/6VzzNDwUwV).
-
-## Issues
-
-Found an issue with Remotion? [File an issue here](https://github.com/remotion-dev/remotion/issues/new).
-
-## License
-
-Note that for some entities a company license is needed. [Read the terms here](https://github.com/remotion-dev/remotion/blob/main/LICENSE.md).
+Degrade + boost the lines through the app (see the repo's commit history
+for the exact pipeline), drop the wavs into `public/`, and update
+`src/timings.json` with the measured durations — `src/timeline.ts` derives
+every frame offset from it, so the video re-times itself.

@@ -42,24 +42,27 @@ Run it from the repo root:
 python3 -m unittest discover tests -v
 ```
 
-The suite is in four modules:
+The suite is in six modules:
 
 - [`tests/test_ffmpeg_utils.py`](tests/test_ffmpeg_utils.py) — binary
-  discovery, file probing, loudnorm-JSON / progress-line parsing. Uses
-  `unittest.mock` to exercise the `find_ffmpeg` / `find_ffprobe` fallback
-  chain and `probe_file` error paths.
+  discovery (bundled → PATH → Homebrew), file probing, loudnorm-JSON /
+  progress-line parsing, waveform argv builder.
 - [`tests/test_processor.py`](tests/test_processor.py) — `LoudnessTarget`
-  presets, `_unique_output_path` collision handling, filter-chain
-  assembly (via mocked `subprocess.Popen` — asserts exact ffmpeg args for
-  pass 1 and pass 2), error wrapping, cancellation.
+  presets, output-path collision handling, filter-chain assembly (via
+  mocked `subprocess.Popen` — asserts exact ffmpeg args for both passes,
+  copy vs re-encode branches), error wrapping, cancellation.
+- [`tests/test_app_core.py`](tests/test_app_core.py) — the headless core
+  behind the GUI: snapshot shape, queue add/dedupe/reject, target
+  persistence, and the real batch flow against ffmpeg (done +
+  failure-continues + waveform data URIs).
+- [`tests/test_main.py`](tests/test_main.py) — CLI argument surface and
+  the `--cli` batch path.
 - [`tests/test_integration.py`](tests/test_integration.py) — real ffmpeg
-  end-to-end: synthesizes a short quiet MP4, boosts it, and asserts
-  loudness lands within ±0.5 LU of each preset, the video stream stays
-  bit-identical, collisions produce suffixed outputs, and mid-run cancel
-  cleans up the partial file. Auto-skipped if ffmpeg isn't available.
-- [`tests/test_gui_helpers.py`](tests/test_gui_helpers.py) — Tk-free UI
-  helpers: `human_size`, `parse_dnd_paths`, `is_dark_mode` (via
-  subprocess mock), and `Palette` invariants.
+  end-to-end: loudness within ±0.5 LU of each preset, bit-identical
+  video stream, VP9→H.264 re-encode, cancel cleanup. Auto-skipped if
+  ffmpeg isn't available.
+- [`tests/test_gui_helpers.py`](tests/test_gui_helpers.py) —
+  `human_size`, settings persistence, queue-item model, batch summary.
 
 If you change any of these files, add a test. In particular: any change
 to the audio filter chain must come with updated assertions in
@@ -78,7 +81,7 @@ integration test).
 
 - Changes that add a configuration option for something nobody asked for
 - Rewrites into a different GUI framework
-- Bundling a custom FFmpeg build (licensing overhead, not worth it)
+- Swapping the pinned static FFmpeg source for a custom-compiled build
 - Scope creep into general audio/video editing
 
 ## Filing a bug
@@ -87,7 +90,8 @@ Open an issue with:
 
 1. macOS version, Python version, FFmpeg version (`ffmpeg -version | head -1`)
 2. Steps to reproduce, including a short sample file if possible
-3. The exact error text (the "Copy error" button in the error dialog helps)
+3. The exact error text (the app's "ffmpeg output" panel under a failed
+   item is selectable)
 
 ## Pull requests
 

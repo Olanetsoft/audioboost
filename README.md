@@ -7,6 +7,11 @@ loudness presets (YouTube -14 LUFS, Podcast -16 LUFS, Broadcast/EBU R128 -23 LUF
 
 Supports `.mp4`, `.mov`, `.mkv`, and `.webm` input. Output is always MP4.
 
+<p align="center">
+  <img src="docs/screenshot.png" width="560"
+       alt="AudioBoost main window: loudness target selector, batch queue with per-file LUFS readouts, waveform preview, and progress mid-run">
+</p>
+
 ## Requirements
 
 - macOS 11 or later (Apple Silicon for the bundled-FFmpeg build)
