@@ -1,5 +1,12 @@
 import React from "react";
-import { AbsoluteFill, Easing, interpolate, useCurrentFrame } from "remotion";
+import {
+  AbsoluteFill,
+  Easing,
+  interpolate,
+  staticFile,
+  useCurrentFrame,
+} from "remotion";
+import { Audio } from "@remotion/media";
 import { T } from "../theme";
 
 const FEATURES = [
@@ -38,6 +45,16 @@ export const Features: React.FC = () => {
       >
         In the box
       </div>
+      {/* one UI click as each row lands */}
+      {FEATURES.map((f, i) => (
+        <Audio
+          key={`click-${f}`}
+          src={staticFile("click.wav")}
+          from={6 + i * 9}
+          volume={0.55}
+          name={`Click ${i + 1}`}
+        />
+      ))}
       <div style={{ display: "flex", flexDirection: "column", gap: 30 }}>
         {FEATURES.map((f, i) => (
           <div

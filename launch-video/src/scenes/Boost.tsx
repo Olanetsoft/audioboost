@@ -17,7 +17,7 @@ export const Boost: React.FC = () => {
     extrapolateRight: "clamp",
     easing: Easing.bezier(0.3, 0, 0.2, 1),
   });
-  const lufs = interpolate(frame, [26, 84], [-41.5, -14.0], {
+  const lufs = interpolate(frame, [26, 84], [-45.5, -14.0], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing: Easing.bezier(0.3, 0, 0.2, 1),

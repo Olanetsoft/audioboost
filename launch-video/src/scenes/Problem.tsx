@@ -51,7 +51,7 @@ export const Problem: React.FC = () => {
           MEASURED
         </span>
         <span style={{ fontSize: 76, color: T.danger, fontWeight: 700 }}>
-          −41.5 LUFS
+          −45.5 LUFS
         </span>
         <span style={{ fontSize: 30, color: T.faint }}>· barely audible</span>
       </div>

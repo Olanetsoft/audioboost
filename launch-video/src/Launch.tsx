@@ -15,13 +15,13 @@ import { Features } from "./scenes/Features";
 import { Outro } from "./scenes/Outro";
 import { T } from "./theme";
 
-// Timeline at 30 fps. Total: 750 frames = 25 s.
+// Timeline at 30 fps. Total: 810 frames = 27 s.
 const HOOK_START = 0;
 const PROBLEM_START = 75; // 2.5 s
 const BOOST_START = 225; // 7.5 s
-const FEATURES_START = 465; // 15.5 s
-const OUTRO_START = 615; // 20.5 s
-export const TOTAL_FRAMES = 750;
+const FEATURES_START = 525; // 17.5 s
+const OUTRO_START = 675; // 22.5 s
+export const TOTAL_FRAMES = 810;
 
 const Grain: React.FC = () => (
   <AbsoluteFill
@@ -59,7 +59,7 @@ export const Launch: React.FC = () => {
       {/* audio — the quiet take and its AudioBoost-processed versions */}
       <Audio src={staticFile("quiet.wav")} from={PROBLEM_START + 24} name="Quiet take" />
       <Audio src={staticFile("boosted.wav")} from={BOOST_START + 26} name="Boosted take" />
-      <Audio src={staticFile("vo_boost.wav")} from={BOOST_START + 130} name="Boost VO" />
+      <Audio src={staticFile("vo_boost.wav")} from={BOOST_START + 126} name="Boost VO" />
       <Audio src={staticFile("vo_outro.wav")} from={OUTRO_START + 14} name="Outro VO" />
 
       <Grain />
